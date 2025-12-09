@@ -1,0 +1,222 @@
+package api
+
+import (
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/nuknal/PocketFlowGo/internal/engine"
+	"github.com/nuknal/PocketFlowGo/internal/store"
+)
+
+type Server struct{ Store *store.SQLite }
+
+func writeJSON(w http.ResponseWriter, v interface{}, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (s *Server) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/workers/register", s.handleRegisterWorker)
+	mux.HandleFunc("/workers/heartbeat", s.handleHeartbeat)
+	mux.HandleFunc("/workers/list", s.handleListWorkers)
+	mux.HandleFunc("/workers/allocate", s.handleAllocate)
+	mux.HandleFunc("/register", s.handleRegisterWorker)
+	mux.HandleFunc("/heartbeat", s.handleHeartbeat)
+	mux.HandleFunc("/list", s.handleListWorkers)
+	mux.HandleFunc("/allocate", s.handleAllocate)
+	mux.HandleFunc("/flows", s.handleFlows)
+	mux.HandleFunc("/flows/version", s.handleFlowVersion)
+	mux.HandleFunc("/tasks", s.handleTasks)
+	mux.HandleFunc("/tasks/get", s.handleGetTask)
+	mux.HandleFunc("/tasks/run_once", s.handleRunOnce)
+	mux.HandleFunc("/tasks/cancel", s.handleCancel)
+	mux.HandleFunc("/tasks/runs", s.handleTaskRuns)
+}
+
+func (s *Server) handleRegisterWorker(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		ID       string
+		URL      string
+		Services []string
+	}
+	dec := json.NewDecoder(r.Body)
+	_ = dec.Decode(&payload)
+	_ = s.Store.RegisterWorker(store.WorkerInfo{ID: payload.ID, URL: payload.URL, Services: payload.Services, Load: 0, LastHeartbeat: time.Now().Unix(), Status: "online"})
+	writeJSON(w, map[string]string{"ok": "1"}, 200)
+}
+
+func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		ID   string
+		URL  string
+		Load int
+	}
+	dec := json.NewDecoder(r.Body)
+	_ = dec.Decode(&payload)
+	_ = s.Store.HeartbeatWorker(payload.ID, payload.URL, payload.Load)
+	writeJSON(w, map[string]string{"ok": "1"}, 200)
+}
+
+func (s *Server) handleListWorkers(w http.ResponseWriter, r *http.Request) {
+	service := r.URL.Query().Get("service")
+	ttlS := r.URL.Query().Get("ttl")
+	ttl, _ := strconv.ParseInt(ttlS, 10, 64)
+	if ttl == 0 {
+		ttl = 15
+	}
+	lst, _ := s.Store.ListWorkers(service, ttl)
+	writeJSON(w, lst, 200)
+}
+
+func (s *Server) handleAllocate(w http.ResponseWriter, r *http.Request) {
+	service := r.URL.Query().Get("service")
+	lst, _ := s.Store.ListWorkers(service, 15)
+	if len(lst) == 0 {
+		writeJSON(w, map[string]string{"error": "no worker"}, 500)
+		return
+	}
+	best := lst[0]
+	for _, wkr := range lst {
+		if wkr.Load < best.Load {
+			best = wkr
+		}
+	}
+	writeJSON(w, best, 200)
+}
+
+func (s *Server) handleFlows(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var payload struct{ Name string }
+		dec := json.NewDecoder(r.Body)
+		_ = dec.Decode(&payload)
+		id, err := s.Store.CreateFlow(payload.Name)
+		if err != nil {
+			writeJSON(w, map[string]string{"error": err.Error()}, 500)
+			return
+		}
+		writeJSON(w, map[string]string{"id": id}, 200)
+		return
+	}
+	writeJSON(w, map[string]string{"error": "method"}, 405)
+}
+
+func (s *Server) handleFlowVersion(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var payload struct {
+			FlowID         string
+			Version        int
+			DefinitionJSON string
+			Status         string
+		}
+		dec := json.NewDecoder(r.Body)
+		_ = dec.Decode(&payload)
+		id, err := s.Store.CreateFlowVersion(payload.FlowID, payload.Version, payload.DefinitionJSON, payload.Status)
+		if err != nil {
+			writeJSON(w, map[string]string{"error": err.Error()}, 500)
+			return
+		}
+		writeJSON(w, map[string]string{"id": id}, 200)
+		return
+	}
+	writeJSON(w, map[string]string{"error": "method"}, 405)
+}
+
+func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var payload struct {
+			FlowID     string
+			Version    int
+			ParamsJSON string
+		}
+		dec := json.NewDecoder(r.Body)
+		_ = dec.Decode(&payload)
+		var fv store.FlowVersion
+		var err error
+		if payload.Version == 0 {
+			fv, err = s.Store.LatestPublishedVersion(payload.FlowID)
+		} else {
+			fv, err = s.Store.LatestPublishedVersion(payload.FlowID)
+		}
+		if err != nil {
+			writeJSON(w, map[string]string{"error": err.Error()}, 500)
+			return
+		}
+		var def struct{ Start string }
+		_ = json.Unmarshal([]byte(fv.DefinitionJSON), &def)
+		if def.Start == "" {
+			writeJSON(w, map[string]string{"error": "no start"}, 400)
+			return
+		}
+		id, err := s.Store.CreateTask(fv.ID, payload.ParamsJSON, "", def.Start)
+		if err != nil {
+			writeJSON(w, map[string]string{"error": err.Error()}, 500)
+			return
+		}
+		writeJSON(w, map[string]string{"id": id}, 200)
+		return
+	} else if r.Method == http.MethodGet {
+		status := r.URL.Query().Get("status")
+		tasks, err := s.Store.ListTasks(status, 100)
+		if err != nil {
+			writeJSON(w, map[string]string{"error": err.Error()}, 500)
+			return
+		}
+		writeJSON(w, tasks, 200)
+		return
+	}
+	writeJSON(w, map[string]string{"error": "method"}, 405)
+}
+
+func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	t, err := s.Store.GetTask(id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, map[string]string{"error": "not found"}, 404)
+			return
+		}
+		writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		return
+	}
+	writeJSON(w, t, 200)
+}
+
+func (s *Server) handleRunOnce(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, map[string]string{"error": "method"}, 405)
+		return
+	}
+	id := r.URL.Query().Get("id")
+	eng := engine.New(s.Store)
+	err := eng.RunOnce(id)
+	if err != nil {
+		writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		return
+	}
+	writeJSON(w, map[string]string{"ok": "1"}, 200)
+}
+
+func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, map[string]string{"error": "method"}, 405)
+		return
+	}
+	id := r.URL.Query().Get("id")
+	_ = s.Store.UpdateTaskStatus(id, "canceling")
+	writeJSON(w, map[string]string{"ok": "1"}, 200)
+}
+
+func (s *Server) handleTaskRuns(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("task_id")
+	runs, err := s.Store.ListNodeRuns(id)
+	if err != nil {
+		writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		return
+	}
+	writeJSON(w, runs, 200)
+}
