@@ -63,7 +63,16 @@ func (s *SQLite) RegisterWorker(w WorkerInfo) error {
 }
 
 func (s *SQLite) HeartbeatWorker(id string, url string, load int) error {
-	_, err := s.DB.Exec("UPDATE workers SET last_heartbeat=?, load=? WHERE id=? OR url=?", nowUnix(), load, id, url)
+	_, err := s.DB.Exec("UPDATE workers SET last_heartbeat=?, load=?, status='online' WHERE id=? OR url=?", nowUnix(), load, id, url)
+	return err
+}
+
+func (s *SQLite) RefreshWorkersStatus(ttl int64) error {
+	if ttl <= 0 {
+		return nil
+	}
+	th := nowUnix() - ttl
+	_, err := s.DB.Exec("UPDATE workers SET status='offline' WHERE last_heartbeat>0 AND last_heartbeat<?", th)
 	return err
 }
 

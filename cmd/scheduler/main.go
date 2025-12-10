@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/nuknal/PocketFlowGo/internal/api"
@@ -22,6 +23,24 @@ func main() {
 	srv := &api.Server{Store: s}
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
+	go func() {
+		ttl := int64(15)
+		if v := os.Getenv("WORKER_OFFLINE_TTL_SEC"); v != "" {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+				ttl = n
+			}
+		}
+		interval := int64(5)
+		if v := os.Getenv("WORKER_REFRESH_INTERVAL_SEC"); v != "" {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+				interval = n
+			}
+		}
+		for {
+			_ = s.RefreshWorkersStatus(ttl)
+			time.Sleep(time.Duration(interval) * time.Second)
+		}
+	}()
 	go func() {
 		eng := engine.New(s)
 		owner := "scheduler"
