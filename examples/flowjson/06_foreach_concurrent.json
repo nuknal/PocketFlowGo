@@ -1,0 +1,19 @@
+{
+  "start": "fe",
+  "nodes": {
+    "fe": {
+      "kind": "foreach",
+      "service": "transform",
+      "prep": { "input_key": "$params.list" },
+      "params": { "mul": 2.0 },
+      "post": { "output_key": "mapped", "action_static": "to_sum" },
+      "parallel_mode": "concurrent",
+      "max_parallel": 3,
+      "failure_strategy": "fail_fast"
+    },
+    "sum": { "kind": "executor", "service": "sum", "prep": { "input_key": "$shared.mapped" }, "post": { "output_key": "total" } }
+  },
+  "edges": [
+    { "from": "fe", "action": "to_sum", "to": "sum" }
+  ]
+}

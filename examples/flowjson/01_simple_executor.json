@@ -1,0 +1,22 @@
+{
+  "start": "start",
+  "nodes": {
+    "start": {
+      "kind": "executor",
+      "service": "transform",
+      "prep": { "input_key": "$params.val" },
+      "params": { "mul": 2.0 },
+      "post": { "output_key": "result", "action_static": "to_end" }
+    },
+    "end": {
+      "kind": "executor",
+      "service": "transform",
+      "prep": { "input_key": "$shared.result" },
+      "params": { "mul": 1.5 },
+      "post": { "output_key": "final" }
+    }
+  },
+  "edges": [
+    { "from": "start", "action": "to_end", "to": "end" }
+  ]
+}

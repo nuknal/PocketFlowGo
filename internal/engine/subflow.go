@@ -2,6 +2,7 @@ package engine
 
 import (
 	"strings"
+	"time"
 
 	"github.com/nuknal/PocketFlowGo/internal/store"
 )
@@ -18,6 +19,23 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	}
 	currSub, _ := sf["curr"].(string)
 	subShared, _ := sf["shared"].(map[string]interface{})
+	strat := node.FailureStrategy
+	if strat == "retry" {
+		now := time.Now().UnixMilli()
+		nt := int64(0)
+		if v, ok := sf["next_try_at"].(int64); ok {
+			nt = v
+		} else if v2, ok := sf["next_try_at"].(float64); ok {
+			nt = int64(v2)
+		}
+		if nt > 0 && now < nt {
+			rt[key] = sf
+			shared["_rt"] = rt
+			_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+			return nil
+		}
+	}
 	if currSub == "" {
 		action := node.Post.ActionStatic
 		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, nil, nil, "", action, "", "")
@@ -82,9 +100,45 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	e.logf("task=%s node=%s kind=subflow sub=%s status=%s action=%s", t.ID, curr, currSub, ternary(execErr == nil, "ok", "error"), subAction)
 	e.recordRun(t, curr, 1, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"input_key": sn.Prep.InputKey, "sub": currSub}, subInput, execRes, errString(execErr), subAction, workerID, workerURL)
 	if execErr != nil {
-		_ = e.Store.UpdateTaskStatus(t.ID, "running")
-		_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
-		return nil
+		if strat == "retry" {
+			rcount := 0
+			if v, ok := sf["retries"].(int); ok {
+				rcount = v
+			} else if v2, ok := sf["retries"].(float64); ok {
+				rcount = int(v2)
+			}
+			rcount++
+			sf["retries"] = rcount
+			if node.WaitMillis > 0 {
+				sf["next_try_at"] = time.Now().UnixMilli() + int64(node.WaitMillis)
+			}
+			if node.MaxRetries > 0 && rcount >= node.MaxRetries {
+				strat = "fail_fast"
+			} else {
+				rt[key] = sf
+				shared["_rt"] = rt
+				_ = e.Store.UpdateTaskStatus(t.ID, "running")
+				_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+				return nil
+			}
+		}
+		action := node.Post.ActionStatic
+		if action == "" && node.Post.ActionKey != "" {
+			action = pickAction(subShared, node.Post.ActionKey)
+		}
+		if node.Post.OutputKey != "" {
+			shared[node.Post.OutputKey] = subShared
+		}
+		delete(rt, key)
+		if len(rt) == 0 {
+			delete(shared, "_rt")
+		} else {
+			shared["_rt"] = rt
+		}
+		if strat == "continue" {
+			return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
+		}
+		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, execErr)
 	}
 	nextSub := findNext(node.Subflow.Edges, currSub, subAction)
 	if nextSub == "" {
