@@ -109,4 +109,4 @@ Notable tests include engine integration scenarios and utility functions.
 ## Notes
 - SQLite is used by default; the model can be extended to Postgres.
 - Leases (`lease_owner/lease_expiry`) prevent double execution; expired leases are reclaimed.
-- See `docs/architecture_zh.md` for a detailed Chinese design record.
+- See `docs/architecture.md` for a detailed design record.
