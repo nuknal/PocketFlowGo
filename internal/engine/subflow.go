@@ -33,13 +33,20 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	}
 	e.logf("task=%s node=%s kind=subflow sub=%s", t.ID, curr, currSub)
 	sn := node.Subflow.Nodes[currSub]
+	childParams := map[string]interface{}{}
+	for k, v := range params {
+		childParams[k] = v
+	}
+	for k, v := range sn.Params {
+		childParams[k] = v
+	}
 	var subInput interface{}
 	if sn.Prep.InputMap != nil {
 		m := make(map[string]interface{})
 		for k, path := range sn.Prep.InputMap {
 			if strings.HasPrefix(path, "$params.") {
 				kk := strings.TrimPrefix(path, "$params.")
-				m[k] = params[kk]
+				m[k] = childParams[kk]
 			} else {
 				m[k] = subShared[path]
 			}
@@ -48,12 +55,12 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	} else if sn.Prep.InputKey != "" {
 		if strings.HasPrefix(sn.Prep.InputKey, "$params.") {
 			k := strings.TrimPrefix(sn.Prep.InputKey, "$params.")
-			subInput = params[k]
+			subInput = childParams[k]
 		} else {
 			subInput = subShared[sn.Prep.InputKey]
 		}
 	}
-	execRes, workerID, workerURL, execErr := e.execExecutor(sn, subInput, params)
+	execRes, workerID, workerURL, execErr := e.execExecutor(sn, subInput, childParams)
 	subAction := ""
 	if execErr == nil {
 		if sn.Post.OutputMap != nil {

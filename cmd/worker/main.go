@@ -66,6 +66,7 @@ func transformHandler(w http.ResponseWriter, r *http.Request) {
 		if m, ok := req.Params["mul"].(float64); ok {
 			mul = m
 		}
+		log.Printf("transform op=%s input=%f mul=%f", op, v, mul)
 		writeJSON(w, execResponse{Result: v * mul})
 		return
 	default:

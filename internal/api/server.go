@@ -36,6 +36,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/tasks/run_once", s.handleRunOnce)
 	mux.HandleFunc("/tasks/cancel", s.handleCancel)
 	mux.HandleFunc("/tasks/runs", s.handleTaskRuns)
+	mux.HandleFunc("/tasks/signal", s.handleTaskSignal)
 }
 
 func (s *Server) handleRegisterWorker(w http.ResponseWriter, r *http.Request) {
@@ -219,4 +220,40 @@ func (s *Server) handleTaskRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, runs, 200)
+}
+
+func (s *Server) handleTaskSignal(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, map[string]string{"error": "method"}, 405)
+		return
+	}
+	var payload struct {
+		TaskID string      `json:"task_id"`
+		Key    string      `json:"key"`
+		Value  interface{} `json:"value"`
+	}
+	dec := json.NewDecoder(r.Body)
+	_ = dec.Decode(&payload)
+	if payload.TaskID == "" || payload.Key == "" {
+		writeJSON(w, map[string]string{"error": "bad request"}, 400)
+		return
+	}
+	t, err := s.Store.GetTask(payload.TaskID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, map[string]string{"error": "not found"}, 404)
+			return
+		}
+		writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		return
+	}
+	var shared map[string]interface{}
+	_ = json.Unmarshal([]byte(t.SharedJSON), &shared)
+	if shared == nil {
+		shared = map[string]interface{}{}
+	}
+	shared[payload.Key] = payload.Value
+	sb, _ := json.Marshal(shared)
+	_ = s.Store.UpdateTaskProgress(payload.TaskID, t.CurrentNodeKey, "", string(sb), t.StepCount)
+	writeJSON(w, map[string]string{"ok": "1"}, 200)
 }

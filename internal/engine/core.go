@@ -28,21 +28,19 @@ func (e *Engine) buildInput(node DefNode, shared map[string]interface{}, params 
     if node.Prep.InputMap != nil {
         m := make(map[string]interface{})
         for k, path := range node.Prep.InputMap {
-            if strings.HasPrefix(path, "$params.") {
-                kk := strings.TrimPrefix(path, "$params.")
-                m[k] = params[kk]
+            if strings.HasPrefix(path, "$") {
+                m[k] = resolveRef(path, shared, params, nil)
             } else {
-                m[k] = shared[path]
+                m[k] = getByPath(shared, path)
             }
         }
         return m
     }
     if node.Prep.InputKey != "" {
-        if strings.HasPrefix(node.Prep.InputKey, "$params.") {
-            k := strings.TrimPrefix(node.Prep.InputKey, "$params.")
-            return params[k]
+        if strings.HasPrefix(node.Prep.InputKey, "$") {
+            return resolveRef(node.Prep.InputKey, shared, params, nil)
         }
-        return shared[node.Prep.InputKey]
+        return getByPath(shared, node.Prep.InputKey)
     }
     return nil
 }
