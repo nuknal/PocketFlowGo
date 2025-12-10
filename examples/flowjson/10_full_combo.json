@@ -1,24 +1,188 @@
 {
   "start": "choice",
   "nodes": {
-    "choice": { "kind": "choice", "choice_cases": [ { "action": "approval", "expr": { "eq": ["$params.path", "approval"] } } ], "default_action": "parallel" },
-    "approval": { "kind": "approval", "params": { "approval_key": "$shared.approval" }, "post": { "action_key": "approval" } },
-    "timer": { "kind": "timer", "params": { "delay_ms": 100 }, "post": { "action_static": "go" } },
-    "foreach": { "kind": "foreach", "service": "transform", "prep": { "input_key": "$shared.list" }, "params": { "mul": 2.0 }, "post": { "output_key": "mapped", "action_static": "go" }, "parallel_mode": "sequential" },
-    "parallel": { "kind": "parallel", "parallel_services": ["transform", "transform"], "prep": { "input_key": "$params.val" }, "params": { "mul": 3.0 }, "post": { "output_key": "agg", "action_static": "next" }, "parallel_mode": "concurrent", "max_parallel": 2 },
-    "wait": { "kind": "wait_event", "params": { "signal_key": "$shared.flag", "timeout_ms": 1000 }, "post": { "action_static": "go" } },
-    "sf": { "kind": "subflow", "subflow": { "start": "a", "nodes": { "a": { "kind": "executor", "service": "transform", "prep": { "input_key": "$params.val" }, "params": { "mul": 5.0 }, "post": { "output_key": "m", "action_static": "go" } }, "b": { "kind": "executor", "service": "route", "prep": { "input_key": "m" }, "params": { "action": "goC" }, "post": { "action_static": "done" } } }, "edges": [ { "from": "a", "action": "go", "to": "b" } ] }, "post": { "output_key": "sub_out", "action_static": "next" } },
-    "end": { "kind": "executor", "service": "transform", "prep": { "input_key": "$shared.sub_out.m" }, "params": { "mul": 100.0 }, "post": { "output_key": "end_out" } }
+    "choice": {
+      "kind": "choice",
+      "choice_cases": [
+        {
+          "action": "approval",
+          "expr": {
+            "eq": [
+              "$params.path",
+              "approval"
+            ]
+          }
+        }
+      ],
+      "default_action": "parallel"
+    },
+    "approval": {
+      "kind": "approval",
+      "params": {
+        "approval_key": "$shared.approval"
+      },
+      "post": {
+        "action_key": "approval"
+      }
+    },
+    "timer": {
+      "kind": "timer",
+      "params": {
+        "delay_ms": 100
+      },
+      "post": {
+        "action_static": "go"
+      }
+    },
+    "foreach": {
+      "kind": "foreach",
+      "service": "transform",
+      "prep": {
+        "input_key": "$shared.list"
+      },
+      "params": {
+        "mul": 2.0
+      },
+      "post": {
+        "output_key": "mapped",
+        "action_static": "go"
+      },
+      "parallel_mode": "sequential"
+    },
+    "parallel": {
+      "kind": "parallel",
+      "parallel_services": [
+        "transform",
+        "transform"
+      ],
+      "prep": {
+        "input_key": "$params.val"
+      },
+      "params": {
+        "mul": 3.0
+      },
+      "post": {
+        "output_key": "agg",
+        "action_static": "next"
+      },
+      "parallel_mode": "concurrent",
+      "max_parallel": 2
+    },
+    "wait": {
+      "kind": "wait_event",
+      "params": {
+        "signal_key": "$shared.flag",
+        "timeout_ms": 1000
+      },
+      "post": {
+        "action_static": "go"
+      }
+    },
+    "sf": {
+      "kind": "subflow",
+      "subflow": {
+        "start": "a",
+        "nodes": {
+          "a": {
+            "kind": "executor",
+            "service": "transform",
+            "prep": {
+              "input_key": "$params.val"
+            },
+            "params": {
+              "mul": 5.0
+            },
+            "post": {
+              "output_key": "m",
+              "action_static": "go"
+            }
+          },
+          "b": {
+            "kind": "executor",
+            "service": "route",
+            "prep": {
+              "input_key": "m"
+            },
+            "params": {
+              "action": "goC"
+            },
+            "post": {
+              "action_static": "done"
+            }
+          }
+        },
+        "edges": [
+          {
+            "from": "a",
+            "action": "go",
+            "to": "b"
+          }
+        ]
+      },
+      "post": {
+        "output_key": "sub_out",
+        "action_static": "next"
+      }
+    },
+    "end": {
+      "kind": "executor",
+      "service": "transform",
+      "prep": {
+        "input_key": "$shared.sub_out.m"
+      },
+      "params": {
+        "mul": 100.0
+      },
+      "post": {
+        "output_key": "end_out"
+      }
+    }
   },
   "edges": [
-    { "from": "choice", "action": "approval", "to": "approval" },
-    { "from": "choice", "action": "parallel", "to": "parallel" },
-    { "from": "approval", "action": "approved", "to": "timer" },
-    { "from": "approval", "action": "rejected", "to": "parallel" },
-    { "from": "timer", "action": "go", "to": "foreach" },
-    { "from": "foreach", "action": "go", "to": "wait" },
-    { "from": "parallel", "action": "next", "to": "wait" },
-    { "from": "wait", "action": "go", "to": "sf" },
-    { "from": "sf", "action": "next", "to": "end" }
+    {
+      "from": "choice",
+      "action": "approval",
+      "to": "approval"
+    },
+    {
+      "from": "choice",
+      "action": "parallel",
+      "to": "parallel"
+    },
+    {
+      "from": "approval",
+      "action": "approved",
+      "to": "timer"
+    },
+    {
+      "from": "approval",
+      "action": "rejected",
+      "to": "parallel"
+    },
+    {
+      "from": "timer",
+      "action": "go",
+      "to": "foreach"
+    },
+    {
+      "from": "foreach",
+      "action": "go",
+      "to": "wait"
+    },
+    {
+      "from": "parallel",
+      "action": "next",
+      "to": "wait"
+    },
+    {
+      "from": "wait",
+      "action": "go",
+      "to": "sf"
+    },
+    {
+      "from": "sf",
+      "action": "next",
+      "to": "end"
+    }
   ]
 }

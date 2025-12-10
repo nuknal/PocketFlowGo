@@ -1,12 +1,52 @@
 {
   "start": "approval",
   "nodes": {
-    "approval": { "kind": "approval", "params": { "approval_key": "$params.approval" }, "post": { "action_key": "approval" } },
-    "approved_exec": { "kind": "executor", "service": "transform", "prep": { "input_key": "$params.val" }, "params": { "mul": 100.0 }, "post": { "output_key": "approved_result" } },
-    "rejected_exec": { "kind": "executor", "service": "transform", "prep": { "input_key": "$params.val" }, "params": { "mul": 0.0 }, "post": { "output_key": "rejected_result" } }
+    "approval": {
+      "kind": "approval",
+      "params": {
+        "approval_key": "$params.approval"
+      },
+      "post": {
+        "action_key": "approval"
+      }
+    },
+    "approved_exec": {
+      "kind": "executor",
+      "service": "transform",
+      "prep": {
+        "input_key": "$params.val"
+      },
+      "params": {
+        "mul": 100.0
+      },
+      "post": {
+        "output_key": "approved_result"
+      }
+    },
+    "rejected_exec": {
+      "kind": "executor",
+      "service": "transform",
+      "prep": {
+        "input_key": "$params.val"
+      },
+      "params": {
+        "mul": 0.0
+      },
+      "post": {
+        "output_key": "rejected_result"
+      }
+    }
   },
   "edges": [
-    { "from": "approval", "action": "approved", "to": "approved_exec" },
-    { "from": "approval", "action": "rejected", "to": "rejected_exec" }
+    {
+      "from": "approval",
+      "action": "approved",
+      "to": "approved_exec"
+    },
+    {
+      "from": "approval",
+      "action": "rejected",
+      "to": "rejected_exec"
+    }
   ]
 }
