@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -47,7 +48,7 @@ func (s *SQLite) Init() error {
 
 func nowUnix() int64 { return time.Now().Unix() }
 
-func genID(prefix string) string { return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()) }
+func genID(_ string) string { return uuid.New().String() }
 
 type WorkerInfo struct {
 	ID            string   `json:"id"`

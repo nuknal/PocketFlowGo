@@ -58,13 +58,15 @@ export default function CustomNode({ data }: NodeProps) {
   return (
     <Card
       className={`min-w-[180px] max-w-[250px] shadow-sm border-2 ${
-        isStart ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'
+        isStart
+          ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-100 dark:ring-blue-900'
+          : 'border-border'
       }`}
     >
       <Handle
         type="target"
         position={Position.Left}
-        className="w-3 h-3 bg-slate-400"
+        className="w-3 h-3 bg-muted-foreground"
       />
 
       <NodeHeader kind={kind} label={label as string} isStart={isStart} />
@@ -76,7 +78,7 @@ export default function CustomNode({ data }: NodeProps) {
             <span className="text-muted-foreground font-mono text-[10px]">
               Service
             </span>
-            <div className="font-medium bg-slate-100 p-1 rounded">
+            <div className="font-medium bg-muted p-1 rounded">
               {rest.service || `${rest.exec_type}:${rest.func || ''}`}
             </div>
           </div>
