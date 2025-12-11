@@ -202,7 +202,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		if payload.Version == 0 {
 			fv, err = s.Store.LatestPublishedVersion(payload.FlowID)
 		} else {
-			fv, err = s.Store.LatestPublishedVersion(payload.FlowID)
+			fv, err = s.Store.GetFlowVersionByFlowIDAndVersion(payload.FlowID, payload.Version)
 		}
 		if err != nil {
 			writeJSON(w, map[string]string{"error": err.Error()}, 500)

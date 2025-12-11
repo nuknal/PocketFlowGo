@@ -16,6 +16,7 @@ import GroupNode from './GroupNode'
 
 interface FlowVisualizerProps {
   definitionJson: string
+  height?: string
 }
 
 const nodeTypes = {
@@ -25,6 +26,7 @@ const nodeTypes = {
 
 export default function FlowVisualizer({
   definitionJson,
+  height = '500px',
 }: FlowVisualizerProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -46,7 +48,7 @@ export default function FlowVisualizer({
   }, [definitionJson, setNodes, setEdges])
 
   return (
-    <div className="h-[500px] w-full border rounded-lg bg-slate-50">
+    <div className="w-full border rounded-lg bg-slate-50" style={{ height }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

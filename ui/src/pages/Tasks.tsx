@@ -264,7 +264,7 @@ export default function Tasks() {
                     {task.flow_name ? (
                       <div className="flex flex-col">
                         <Link
-                          to={`/flow-versions/${task.flow_version_id}`}
+                          to={`/flows/${task.flow_id}?version=${task.flow_version_id}`}
                           className="font-medium hover:underline hover:text-blue-600"
                         >
                           {task.flow_name}-v{task.flow_version}
@@ -275,7 +275,7 @@ export default function Tasks() {
                       </div>
                     ) : (
                       <Link
-                        to={`/flow-versions/${task.flow_version_id}`}
+                        to={`/flows/${task.flow_id || task.flow_version_id.split('-')[0]}?version=${task.flow_version_id}`}
                         className="hover:underline hover:text-blue-600"
                       >
                         {task.flow_version_id}

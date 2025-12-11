@@ -26,9 +26,10 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Plus } from 'lucide-react'
+import { Plus, Play } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, type Flow } from '@/lib/api'
+import { RunTaskDialog } from '@/components/RunTaskDialog'
 
 export default function Flows() {
   const [flows, setFlows] = useState<Flow[]>([])
@@ -36,6 +37,10 @@ export default function Flows() {
   const [newFlowDesc, setNewFlowDesc] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [runDialogFlow, setRunDialogFlow] = useState<{
+    id: string
+    name: string
+  } | null>(null)
 
   const fetchFlows = async () => {
     try {
@@ -158,16 +163,35 @@ export default function Flows() {
                     {new Date(flow.created_at * 1000).toLocaleString()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">
-                      Edit
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 lg:px-3"
+                        onClick={() =>
+                          setRunDialogFlow({ id: flow.id, name: flow.name })
+                        }
+                      >
+                        <Play className="h-3.5 w-3.5 mr-1.5" />
+                        Run
+                      </Button>
+                      <Link to={`/flows/${flow.id}`}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 lg:px-3"
+                        >
+                          Edit
+                        </Button>
+                      </Link>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
               {flows.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={3}
+                    colSpan={4}
                     className="text-center h-24 text-muted-foreground"
                   >
                     No flows found.
@@ -178,6 +202,17 @@ export default function Flows() {
           </Table>
         </CardContent>
       </Card>
+
+      {runDialogFlow && (
+        <RunTaskDialog
+          open={!!runDialogFlow}
+          onOpenChange={(open) => !open && setRunDialogFlow(null)}
+          flowId={runDialogFlow.id}
+          version={0} // 0 means latest version
+          flowName={runDialogFlow.name}
+          onSuccess={() => setRunDialogFlow(null)}
+        />
+      )}
     </div>
   )
 }
