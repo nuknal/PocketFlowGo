@@ -108,7 +108,7 @@ func TestChoiceNode(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("f1")
+	fid, err := s.CreateFlow("f1", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -170,7 +170,7 @@ func TestParallelNode(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("f2")
+	fid, err := s.CreateFlow("f2", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -223,7 +223,7 @@ func TestSubflowNode(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("f3")
+	fid, err := s.CreateFlow("f3", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -298,7 +298,7 @@ func TestExecutorWeightedByLoad(t *testing.T) {
 	srvBad := startBadWorker(t, s)
 	defer srv.Close()
 	defer srvBad.Close()
-	fid, err := s.CreateFlow("f4")
+	fid, err := s.CreateFlow("f4", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -350,7 +350,7 @@ func TestCancelingTask(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("f5")
+	fid, err := s.CreateFlow("f5", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -395,7 +395,7 @@ func TestChoiceExprComplex(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("f6")
+	fid, err := s.CreateFlow("f6", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -461,7 +461,7 @@ func TestParallelFailFast(t *testing.T) {
 	srvBad := startBadWorker(t, s)
 	defer srv.Close()
 	defer srvBad.Close()
-	fid, err := s.CreateFlow("f7")
+	fid, err := s.CreateFlow("f7", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -516,7 +516,7 @@ func TestParallelMixedExecTypes(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("pm1")
+	fid, err := s.CreateFlow("pm1", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -599,7 +599,7 @@ func TestTimerNode(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("f8")
+	fid, err := s.CreateFlow("f8", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -638,7 +638,7 @@ func TestForeachNode(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("f9")
+	fid, err := s.CreateFlow("f9", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -681,7 +681,7 @@ func TestWaitEventNode(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("f10")
+	fid, err := s.CreateFlow("f10", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -728,7 +728,7 @@ func TestApprovalNode(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("f11")
+	fid, err := s.CreateFlow("f11", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -773,7 +773,7 @@ func TestApprovalNode(t *testing.T) {
 
 func TestLocalFuncExecutor(t *testing.T) {
 	s := openTestStore(t)
-	fid, err := s.CreateFlow("lf1")
+	fid, err := s.CreateFlow("lf1", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -827,7 +827,7 @@ func TestLocalFuncExecutor(t *testing.T) {
 
 func TestLocalScriptExecutor(t *testing.T) {
 	s := openTestStore(t)
-	fid, err := s.CreateFlow("ls1")
+	fid, err := s.CreateFlow("ls1", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -870,7 +870,7 @@ func TestLocalScriptExecutor(t *testing.T) {
 
 func TestForeachLocalFunc(t *testing.T) {
 	s := openTestStore(t)
-	fid, err := s.CreateFlow("fe_local")
+	fid, err := s.CreateFlow("fe_local", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -938,7 +938,7 @@ func TestSubflowExecOverride(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
 	defer srv.Close()
-	fid, err := s.CreateFlow("sfov")
+	fid, err := s.CreateFlow("sfov", "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}

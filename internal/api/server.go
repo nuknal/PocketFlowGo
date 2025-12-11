@@ -111,10 +111,13 @@ func (s *Server) handleAllocate(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFlows(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		var payload struct{ Name string }
+		var payload struct {
+			Name        string
+			Description string
+		}
 		dec := json.NewDecoder(r.Body)
 		_ = dec.Decode(&payload)
-		id, err := s.Store.CreateFlow(payload.Name)
+		id, err := s.Store.CreateFlow(payload.Name, payload.Description)
 		if err != nil {
 			writeJSON(w, map[string]string{"error": err.Error()}, 500)
 			return

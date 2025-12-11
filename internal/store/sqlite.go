@@ -27,7 +27,7 @@ func OpenSQLite(path string) (*SQLite, error) {
 func (s *SQLite) Init() error {
 	stmts := []string{
 		"PRAGMA foreign_keys = ON;",
-		"CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, name TEXT, created_at INTEGER);",
+		"CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, name TEXT, description TEXT, created_at INTEGER);",
 		"CREATE TABLE IF NOT EXISTS flow_versions (id TEXT PRIMARY KEY, flow_id TEXT, version INTEGER, definition_json TEXT, status TEXT, created_at INTEGER);",
 		"CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, flow_version_id TEXT, node_key TEXT, service TEXT, kind TEXT, config_json TEXT);",
 		"CREATE TABLE IF NOT EXISTS edges (id TEXT PRIMARY KEY, flow_version_id TEXT, from_node_key TEXT, action TEXT, to_node_key TEXT);",
@@ -40,6 +40,8 @@ func (s *SQLite) Init() error {
 			return err
 		}
 	}
+	// Try to add description column if it doesn't exist (simplistic migration)
+	_, _ = s.DB.Exec("ALTER TABLE flows ADD COLUMN description TEXT")
 	return nil
 }
 
@@ -114,9 +116,10 @@ func (s *SQLite) ListWorkers(service string, ttl int64) ([]WorkerInfo, error) {
 }
 
 type Flow struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt int64  `json:"created_at"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	CreatedAt   int64  `json:"created_at"`
 }
 type FlowVersion struct {
 	ID             string `json:"id"`
@@ -126,9 +129,9 @@ type FlowVersion struct {
 	Status         string `json:"status"`
 }
 
-func (s *SQLite) CreateFlow(name string) (string, error) {
+func (s *SQLite) CreateFlow(name string, description string) (string, error) {
 	id := genID("flow")
-	_, err := s.DB.Exec("INSERT INTO flows(id,name,created_at) VALUES(?,?,?)", id, name, nowUnix())
+	_, err := s.DB.Exec("INSERT INTO flows(id,name,description,created_at) VALUES(?,?,?,?)", id, name, description, nowUnix())
 	if err != nil {
 		return "", err
 	}
@@ -145,7 +148,7 @@ func (s *SQLite) CreateFlowVersion(flowID string, version int, definitionJSON st
 }
 
 func (s *SQLite) ListFlows() ([]Flow, error) {
-	rows, err := s.DB.Query("SELECT id, name, created_at FROM flows ORDER BY created_at DESC")
+	rows, err := s.DB.Query("SELECT id, name, description, created_at FROM flows ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -153,9 +156,12 @@ func (s *SQLite) ListFlows() ([]Flow, error) {
 	var flows []Flow
 	for rows.Next() {
 		var f Flow
-		if err := rows.Scan(&f.ID, &f.Name, &f.CreatedAt); err != nil {
+		// Handle potential NULL description
+		var desc sql.NullString
+		if err := rows.Scan(&f.ID, &f.Name, &desc, &f.CreatedAt); err != nil {
 			return nil, err
 		}
+		f.Description = desc.String
 		flows = append(flows, f)
 	}
 	return flows, nil

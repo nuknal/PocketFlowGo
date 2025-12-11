@@ -30,6 +30,7 @@ export interface Task {
 export interface Flow {
   id: string
   name: string
+  description: string
   created_at: number
 }
 
@@ -130,13 +131,16 @@ export const api = {
     return res.json()
   },
 
-  createFlow: async (name: string): Promise<{ id: string }> => {
+  createFlow: async (
+    name: string,
+    description: string = ''
+  ): Promise<{ id: string }> => {
     const res = await fetch(`${API_BASE_URL}/flows`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ Name: name }),
+      body: JSON.stringify({ Name: name, Description: description }),
     })
     if (!res.ok) throw new Error('Failed to create flow')
     return res.json()

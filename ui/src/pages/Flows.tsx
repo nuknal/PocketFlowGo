@@ -33,6 +33,7 @@ import { api, type Flow } from '@/lib/api'
 export default function Flows() {
   const [flows, setFlows] = useState<Flow[]>([])
   const [newFlowName, setNewFlowName] = useState('')
+  const [newFlowDesc, setNewFlowDesc] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [creating, setCreating] = useState(false)
 
@@ -53,8 +54,9 @@ export default function Flows() {
     if (!newFlowName.trim()) return
     setCreating(true)
     try {
-      await api.createFlow(newFlowName)
+      await api.createFlow(newFlowName, newFlowDesc)
       setNewFlowName('')
+      setNewFlowDesc('')
       setIsDialogOpen(false)
       fetchFlows()
     } catch (error) {
@@ -99,6 +101,17 @@ export default function Flows() {
                   className="col-span-3"
                 />
               </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="description" className="text-right">
+                  Description
+                </Label>
+                <Input
+                  id="description"
+                  value={newFlowDesc}
+                  onChange={(e) => setNewFlowDesc(e.target.value)}
+                  className="col-span-3"
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button
@@ -125,6 +138,7 @@ export default function Flows() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Description</TableHead>
                 <TableHead>Created At</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -136,6 +150,9 @@ export default function Flows() {
                     <Link to={`/flows/${flow.id}`} className="hover:underline">
                       {flow.name}
                     </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {flow.description || '-'}
                   </TableCell>
                   <TableCell>
                     {new Date(flow.created_at * 1000).toLocaleString()}
