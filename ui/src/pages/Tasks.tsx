@@ -1,24 +1,24 @@
-import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog'
 import {
   Table,
   TableBody,
@@ -35,109 +35,111 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Search, Plus } from "lucide-react";
-import { api, type Task, type Flow } from "@/lib/api";
+} from '@/components/ui/table'
+import { Search, Plus } from 'lucide-react'
+import { api, type Task, type Flow } from '@/lib/api'
 
 const getStatusBadge = (status: string) => {
   switch (status) {
-    case "completed":
-      return <Badge className="bg-green-500">Completed</Badge>;
-    case "running":
-      return <Badge className="bg-blue-500">Running</Badge>;
-    case "failed":
-      return <Badge variant="destructive">Failed</Badge>;
-    case "pending":
-      return <Badge variant="secondary">Pending</Badge>;
-    case "canceling":
-        return <Badge className="bg-orange-500">Canceling</Badge>;
-    case "canceled":
-        return <Badge variant="secondary">Canceled</Badge>;
+    case 'completed':
+      return <Badge className="bg-green-500">Completed</Badge>
+    case 'running':
+      return <Badge className="bg-blue-500">Running</Badge>
+    case 'failed':
+      return <Badge variant="destructive">Failed</Badge>
+    case 'pending':
+      return <Badge variant="secondary">Pending</Badge>
+    case 'canceling':
+      return <Badge className="bg-orange-500">Canceling</Badge>
+    case 'canceled':
+      return <Badge variant="secondary">Canceled</Badge>
     default:
-      return <Badge variant="outline">{status}</Badge>;
+      return <Badge variant="outline">{status}</Badge>
   }
-};
+}
 
 export default function Tasks() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [flows, setFlows] = useState<Flow[]>([]);
-  const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [flows, setFlows] = useState<Flow[]>([])
+  const [filteredTasks, setFilteredTasks] = useState<Task[]>([])
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
+
   // Create Task State
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [selectedFlowId, setSelectedFlowId] = useState("");
-  const [taskParams, setTaskParams] = useState("{}");
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [selectedFlowId, setSelectedFlowId] = useState('')
+  const [taskParams, setTaskParams] = useState('{}')
 
   const fetchData = async () => {
     try {
       const [tasksData, flowsData] = await Promise.all([
         api.getTasks(),
         api.getFlows().catch(() => []),
-      ]);
-      setTasks(tasksData || []);
-      setFlows(flowsData || []);
+      ])
+      setTasks(tasksData || [])
+      setFlows(flowsData || [])
     } catch (error) {
-      console.error("Failed to fetch data:", error);
+      console.error('Failed to fetch data:', error)
     }
-  };
+  }
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    fetchData()
+    const interval = setInterval(fetchData, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
-    let result = tasks;
+    let result = tasks
 
-    if (statusFilter !== "all") {
-      result = result.filter((t) => t.status === statusFilter);
+    if (statusFilter !== 'all') {
+      result = result.filter((t) => t.status === statusFilter)
     }
 
     if (searchQuery) {
       result = result.filter((t) =>
         t.id.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      )
     }
 
-    setFilteredTasks(result);
-  }, [tasks, statusFilter, searchQuery]);
+    setFilteredTasks(result)
+  }, [tasks, statusFilter, searchQuery])
 
   const handleCreateTask = async () => {
-    if (!selectedFlowId) return;
-    setCreating(true);
+    if (!selectedFlowId) return
+    setCreating(true)
     try {
-      let params = {};
+      let params = {}
       try {
-        params = JSON.parse(taskParams);
+        params = JSON.parse(taskParams)
       } catch (e) {
-        alert("Invalid JSON parameters");
-        setCreating(false);
-        return;
+        alert('Invalid JSON parameters')
+        setCreating(false)
+        return
       }
 
-      await api.createTask(selectedFlowId, 0, params);
-      setIsDialogOpen(false);
-      setSelectedFlowId("");
-      setTaskParams("{}");
-      fetchData();
+      await api.createTask(selectedFlowId, 0, params)
+      setIsDialogOpen(false)
+      setSelectedFlowId('')
+      setTaskParams('{}')
+      fetchData()
     } catch (error) {
-      console.error("Failed to create task:", error);
-      alert("Failed to create task");
+      console.error('Failed to create task:', error)
+      alert('Failed to create task')
     } finally {
-      setCreating(false);
+      setCreating(false)
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Tasks</h1>
-          <p className="text-muted-foreground">Monitor and manage task execution</p>
+          <p className="text-muted-foreground">
+            Monitor and manage task execution
+          </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -159,7 +161,10 @@ export default function Tasks() {
                   Flow
                 </Label>
                 <div className="col-span-3">
-                  <Select value={selectedFlowId} onValueChange={setSelectedFlowId}>
+                  <Select
+                    value={selectedFlowId}
+                    onValueChange={setSelectedFlowId}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a flow" />
                     </SelectTrigger>
@@ -186,8 +191,12 @@ export default function Tasks() {
               </div>
             </div>
             <DialogFooter>
-              <Button type="submit" onClick={handleCreateTask} disabled={creating || !selectedFlowId}>
-                {creating ? "Creating..." : "Create Task"}
+              <Button
+                type="submit"
+                onClick={handleCreateTask}
+                disabled={creating || !selectedFlowId}
+              >
+                {creating ? 'Creating...' : 'Create Task'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -251,7 +260,28 @@ export default function Tasks() {
                       {task.id}
                     </Link>
                   </TableCell>
-                  <TableCell>{task.flow_version_id}</TableCell>
+                  <TableCell>
+                    {task.flow_name ? (
+                      <div className="flex flex-col">
+                        <Link
+                          to={`/flow-versions/${task.flow_version_id}`}
+                          className="font-medium hover:underline hover:text-blue-600"
+                        >
+                          {task.flow_name}-v{task.flow_version}
+                        </Link>
+                        <span className="text-[10px] text-muted-foreground truncate max-w-[100px]">
+                          {task.flow_version_id}
+                        </span>
+                      </div>
+                    ) : (
+                      <Link
+                        to={`/flow-versions/${task.flow_version_id}`}
+                        className="hover:underline hover:text-blue-600"
+                      >
+                        {task.flow_version_id}
+                      </Link>
+                    )}
+                  </TableCell>
                   <TableCell>{task.current_node_key || '-'}</TableCell>
                   <TableCell>{task.step_count}</TableCell>
                   <TableCell>{getStatusBadge(task.status)}</TableCell>

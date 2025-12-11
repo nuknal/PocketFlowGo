@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/nuknal/PocketFlowGo/internal/api"
 	"github.com/nuknal/PocketFlowGo/internal/engine"
 	"github.com/nuknal/PocketFlowGo/internal/store"
+	"github.com/nuknal/PocketFlowGo/ui"
 )
 
 func main() {
@@ -25,6 +27,14 @@ func main() {
 	srv := &api.Server{Store: s}
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
+
+	// Serve UI
+	distFS, err := fs.Sub(ui.Assets, "dist")
+	if err != nil {
+		panic(err)
+	}
+	mux.Handle("/", http.StripPrefix("/", http.FileServer(http.FS(distFS))))
+
 	go func() {
 		ttl := int64(15)
 		if v := os.Getenv("WORKER_OFFLINE_TTL_SEC"); v != "" {

@@ -205,6 +205,8 @@ func (s *SQLite) GetFlowVersionByID(id string) (FlowVersion, error) {
 type Task struct {
 	ID             string `json:"id"`
 	FlowVersionID  string `json:"flow_version_id"`
+	FlowName       string `json:"flow_name,omitempty"`
+	FlowVersion    int    `json:"flow_version,omitempty"`
 	Status         string `json:"status"`
 	ParamsJSON     string `json:"params_json"`
 	SharedJSON     string `json:"shared_json"`
@@ -229,9 +231,16 @@ func (s *SQLite) CreateTask(flowVersionID string, paramsJSON string, requestID s
 }
 
 func (s *SQLite) GetTask(id string) (Task, error) {
-	row := s.DB.QueryRow("SELECT id,flow_version_id,status,params_json,shared_json,current_node_key,last_action,step_count,retry_state_json,lease_owner,lease_expiry,request_id,created_at,updated_at FROM tasks WHERE id=?", id)
+	q := `SELECT 
+		t.id, t.flow_version_id, t.status, t.params_json, t.shared_json, t.current_node_key, t.last_action, t.step_count, t.retry_state_json, t.lease_owner, t.lease_expiry, t.request_id, t.created_at, t.updated_at,
+		COALESCE(f.name, ''), COALESCE(fv.version, 0)
+	FROM tasks t
+	LEFT JOIN flow_versions fv ON t.flow_version_id = fv.id
+	LEFT JOIN flows f ON fv.flow_id = f.id
+	WHERE t.id=?`
+	row := s.DB.QueryRow(q, id)
 	var t Task
-	if err := row.Scan(&t.ID, &t.FlowVersionID, &t.Status, &t.ParamsJSON, &t.SharedJSON, &t.CurrentNodeKey, &t.LastAction, &t.StepCount, &t.RetryStateJSON, &t.LeaseOwner, &t.LeaseExpiry, &t.RequestID, &t.CreatedAt, &t.UpdatedAt); err != nil {
+	if err := row.Scan(&t.ID, &t.FlowVersionID, &t.Status, &t.ParamsJSON, &t.SharedJSON, &t.CurrentNodeKey, &t.LastAction, &t.StepCount, &t.RetryStateJSON, &t.LeaseOwner, &t.LeaseExpiry, &t.RequestID, &t.CreatedAt, &t.UpdatedAt, &t.FlowName, &t.FlowVersion); err != nil {
 		return Task{}, err
 	}
 	return t, nil
@@ -306,17 +315,23 @@ func (s *SQLite) UpdateTaskProgressOwned(id string, owner string, currentNode st
 }
 
 func (s *SQLite) ListTasks(status string, flowVersionID string, limit int) ([]Task, error) {
-	q := "SELECT id,flow_version_id,status,params_json,shared_json,current_node_key,last_action,step_count,retry_state_json,lease_owner,lease_expiry,request_id,created_at,updated_at FROM tasks WHERE 1=1"
+	q := `SELECT 
+		t.id, t.flow_version_id, t.status, t.params_json, t.shared_json, t.current_node_key, t.last_action, t.step_count, t.retry_state_json, t.lease_owner, t.lease_expiry, t.request_id, t.created_at, t.updated_at,
+		COALESCE(f.name, ''), COALESCE(fv.version, 0)
+	FROM tasks t
+	LEFT JOIN flow_versions fv ON t.flow_version_id = fv.id
+	LEFT JOIN flows f ON fv.flow_id = f.id
+	WHERE 1=1`
 	args := []interface{}{}
 	if status != "" {
-		q += " AND status=?"
+		q += " AND t.status=?"
 		args = append(args, status)
 	}
 	if flowVersionID != "" {
-		q += " AND flow_version_id=?"
+		q += " AND t.flow_version_id=?"
 		args = append(args, flowVersionID)
 	}
-	q += " ORDER BY updated_at DESC"
+	q += " ORDER BY t.updated_at DESC"
 	if limit <= 0 {
 		limit = 100
 	}
@@ -330,7 +345,7 @@ func (s *SQLite) ListTasks(status string, flowVersionID string, limit int) ([]Ta
 	out := []Task{}
 	for rows.Next() {
 		var t Task
-		if err := rows.Scan(&t.ID, &t.FlowVersionID, &t.Status, &t.ParamsJSON, &t.SharedJSON, &t.CurrentNodeKey, &t.LastAction, &t.StepCount, &t.RetryStateJSON, &t.LeaseOwner, &t.LeaseExpiry, &t.RequestID, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.FlowVersionID, &t.Status, &t.ParamsJSON, &t.SharedJSON, &t.CurrentNodeKey, &t.LastAction, &t.StepCount, &t.RetryStateJSON, &t.LeaseOwner, &t.LeaseExpiry, &t.RequestID, &t.CreatedAt, &t.UpdatedAt, &t.FlowName, &t.FlowVersion); err != nil {
 			return nil, err
 		}
 		out = append(out, t)

@@ -13,6 +13,8 @@ export interface Worker {
 export interface Task {
   id: string
   flow_version_id: string
+  flow_name?: string
+  flow_version?: number
   status: string
   params_json: string
   shared_json: string
