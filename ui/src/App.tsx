@@ -3,6 +3,7 @@ import { Layout } from './components/layout/Layout'
 import Dashboard from './pages/Dashboard'
 import Flows from './pages/Flows'
 import FlowDetails from './pages/FlowDetails'
+import FlowVersionDetails from './pages/FlowVersionDetails'
 import Tasks from './pages/Tasks'
 import TaskDetails from './pages/TaskDetails'
 import Workers from './pages/Workers'
@@ -15,6 +16,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="flows" element={<Flows />} />
           <Route path="flows/:id" element={<FlowDetails />} />
+          <Route path="flow-versions/:id" element={<FlowVersionDetails />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="tasks/:id" element={<TaskDetails />} />
           <Route path="workers" element={<Workers />} />

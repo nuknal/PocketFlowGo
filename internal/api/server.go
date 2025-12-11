@@ -24,16 +24,16 @@ func writeJSON(w http.ResponseWriter, v interface{}, code int) {
 }
 
 func withCORS(h http.HandlerFunc) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("Access-Control-Allow-Origin", "*")
-        w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-        if r.Method == http.MethodOptions {
-            w.WriteHeader(204)
-            return
-        }
-        h(w, r)
-    }
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(204)
+			return
+		}
+		h(w, r)
+	}
 }
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
@@ -47,6 +47,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/allocate", withCORS(s.handleAllocate))
 	mux.HandleFunc("/flows", withCORS(s.handleFlows))
 	mux.HandleFunc("/flows/version", withCORS(s.handleFlowVersion))
+	mux.HandleFunc("/flows/version/get", withCORS(s.handleGetFlowVersion))
 	mux.HandleFunc("/tasks", withCORS(s.handleTasks))
 	mux.HandleFunc("/tasks/get", withCORS(s.handleGetTask))
 	mux.HandleFunc("/tasks/run_once", withCORS(s.handleRunOnce))
@@ -166,6 +167,24 @@ func (s *Server) handleFlowVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"error": "method"}, 405)
 }
 
+func (s *Server) handleGetFlowVersion(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeJSON(w, map[string]string{"error": "missing id"}, 400)
+		return
+	}
+	fv, err := s.Store.GetFlowVersionByID(id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, map[string]string{"error": "not found"}, 404)
+			return
+		}
+		writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		return
+	}
+	writeJSON(w, fv, 200)
+}
+
 func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		var payload struct {
@@ -201,7 +220,8 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if r.Method == http.MethodGet {
 		status := r.URL.Query().Get("status")
-		tasks, err := s.Store.ListTasks(status, 100)
+		flowVersionID := r.URL.Query().Get("flow_version_id")
+		tasks, err := s.Store.ListTasks(status, flowVersionID, 100)
 		if err != nil {
 			writeJSON(w, map[string]string{"error": err.Error()}, 500)
 			return

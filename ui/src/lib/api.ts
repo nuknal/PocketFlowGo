@@ -68,11 +68,21 @@ export const api = {
     return res.json()
   },
 
-  getTasks: async (status?: string): Promise<Task[]> => {
+  getTasks: async (
+    status?: string,
+    flowVersionId?: string
+  ): Promise<Task[]> => {
     const params = new URLSearchParams()
     if (status && status !== 'all') params.append('status', status)
+    if (flowVersionId) params.append('flow_version_id', flowVersionId)
     const res = await fetch(`${API_BASE_URL}/tasks?${params.toString()}`)
     if (!res.ok) throw new Error('Failed to fetch tasks')
+    return res.json()
+  },
+
+  getFlowVersion: async (id: string): Promise<FlowVersion> => {
+    const res = await fetch(`${API_BASE_URL}/flows/version/get?id=${id}`)
+    if (!res.ok) throw new Error('Failed to fetch flow version')
     return res.json()
   },
 
@@ -129,6 +139,28 @@ export const api = {
       body: JSON.stringify({ Name: name }),
     })
     if (!res.ok) throw new Error('Failed to create flow')
+    return res.json()
+  },
+
+  createFlowVersion: async (
+    flowId: string,
+    version: number,
+    definition: string,
+    status: string = 'published'
+  ): Promise<{ id: string }> => {
+    const res = await fetch(`${API_BASE_URL}/flows/version`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        FlowID: flowId,
+        Version: version,
+        DefinitionJSON: definition,
+        Status: status,
+      }),
+    })
+    if (!res.ok) throw new Error('Failed to create flow version')
     return res.json()
   },
 }

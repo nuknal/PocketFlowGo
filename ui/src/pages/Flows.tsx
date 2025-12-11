@@ -15,25 +15,54 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, type Flow } from '@/lib/api'
 
 export default function Flows() {
   const [flows, setFlows] = useState<Flow[]>([])
+  const [newFlowName, setNewFlowName] = useState('')
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+
+  const fetchFlows = async () => {
+    try {
+      const data = await api.getFlows()
+      setFlows(data || [])
+    } catch (error) {
+      console.error('Failed to fetch flows:', error)
+    }
+  }
 
   useEffect(() => {
-    const fetchFlows = async () => {
-      try {
-        const data = await api.getFlows()
-        setFlows(data || [])
-      } catch (error) {
-        console.error('Failed to fetch flows:', error)
-      }
-    }
-
     fetchFlows()
   }, [])
+
+  const handleCreateFlow = async () => {
+    if (!newFlowName.trim()) return
+    setCreating(true)
+    try {
+      await api.createFlow(newFlowName)
+      setNewFlowName('')
+      setIsDialogOpen(false)
+      fetchFlows()
+    } catch (error) {
+      console.error('Failed to create flow:', error)
+    } finally {
+      setCreating(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -44,10 +73,44 @@ export default function Flows() {
             Manage your workflow definitions
           </p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Flow
-        </Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Flow
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Create Flow</DialogTitle>
+              <DialogDescription>
+                Enter a name for the new flow.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="name" className="text-right">
+                  Name
+                </Label>
+                <Input
+                  id="name"
+                  value={newFlowName}
+                  onChange={(e) => setNewFlowName(e.target.value)}
+                  className="col-span-3"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="submit"
+                onClick={handleCreateFlow}
+                disabled={creating}
+              >
+                {creating ? 'Creating...' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card>

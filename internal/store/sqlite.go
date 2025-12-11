@@ -299,12 +299,16 @@ func (s *SQLite) UpdateTaskProgressOwned(id string, owner string, currentNode st
 	return err
 }
 
-func (s *SQLite) ListTasks(status string, limit int) ([]Task, error) {
-	q := "SELECT id,flow_version_id,status,params_json,shared_json,current_node_key,last_action,step_count,retry_state_json,lease_owner,lease_expiry,request_id,created_at,updated_at FROM tasks"
+func (s *SQLite) ListTasks(status string, flowVersionID string, limit int) ([]Task, error) {
+	q := "SELECT id,flow_version_id,status,params_json,shared_json,current_node_key,last_action,step_count,retry_state_json,lease_owner,lease_expiry,request_id,created_at,updated_at FROM tasks WHERE 1=1"
 	args := []interface{}{}
 	if status != "" {
-		q += " WHERE status=?"
+		q += " AND status=?"
 		args = append(args, status)
+	}
+	if flowVersionID != "" {
+		q += " AND flow_version_id=?"
+		args = append(args, flowVersionID)
 	}
 	q += " ORDER BY updated_at DESC"
 	if limit <= 0 {
