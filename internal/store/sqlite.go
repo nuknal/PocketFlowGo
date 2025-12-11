@@ -48,12 +48,12 @@ func nowUnix() int64 { return time.Now().Unix() }
 func genID(prefix string) string { return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()) }
 
 type WorkerInfo struct {
-	ID            string
-	URL           string
-	Services      []string
-	Load          int
-	LastHeartbeat int64
-	Status        string
+	ID            string   `json:"id"`
+	URL           string   `json:"url"`
+	Services      []string `json:"services"`
+	Load          int      `json:"load"`
+	LastHeartbeat int64    `json:"last_heartbeat"`
+	Status        string   `json:"status"`
 }
 
 func (s *SQLite) RegisterWorker(w WorkerInfo) error {
@@ -96,15 +96,17 @@ func (s *SQLite) ListWorkers(service string, ttl int64) ([]WorkerInfo, error) {
 		}
 		var arr []string
 		_ = json.Unmarshal([]byte(sj), &arr)
-		ok := false
-		for _, sname := range arr {
-			if sname == service {
-				ok = true
-				break
+		if service != "" {
+			ok := false
+			for _, sname := range arr {
+				if sname == service {
+					ok = true
+					break
+				}
 			}
-		}
-		if !ok {
-			continue
+			if !ok {
+				continue
+			}
 		}
 		out = append(out, WorkerInfo{ID: id, URL: url, Services: arr, Load: load, LastHeartbeat: hb, Status: status})
 	}
@@ -112,15 +114,16 @@ func (s *SQLite) ListWorkers(service string, ttl int64) ([]WorkerInfo, error) {
 }
 
 type Flow struct {
-	ID   string
-	Name string
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt int64  `json:"created_at"`
 }
 type FlowVersion struct {
-	ID             string
-	FlowID         string
-	Version        int
-	DefinitionJSON string
-	Status         string
+	ID             string `json:"id"`
+	FlowID         string `json:"flow_id"`
+	Version        int    `json:"version"`
+	DefinitionJSON string `json:"definition_json"`
+	Status         string `json:"status"`
 }
 
 func (s *SQLite) CreateFlow(name string) (string, error) {
@@ -139,6 +142,40 @@ func (s *SQLite) CreateFlowVersion(flowID string, version int, definitionJSON st
 		return "", err
 	}
 	return id, nil
+}
+
+func (s *SQLite) ListFlows() ([]Flow, error) {
+	rows, err := s.DB.Query("SELECT id, name, created_at FROM flows ORDER BY created_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var flows []Flow
+	for rows.Next() {
+		var f Flow
+		if err := rows.Scan(&f.ID, &f.Name, &f.CreatedAt); err != nil {
+			return nil, err
+		}
+		flows = append(flows, f)
+	}
+	return flows, nil
+}
+
+func (s *SQLite) ListFlowVersions(flowID string) ([]FlowVersion, error) {
+	rows, err := s.DB.Query("SELECT id, flow_id, version, definition_json, status FROM flow_versions WHERE flow_id=? ORDER BY version DESC", flowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var versions []FlowVersion
+	for rows.Next() {
+		var fv FlowVersion
+		if err := rows.Scan(&fv.ID, &fv.FlowID, &fv.Version, &fv.DefinitionJSON, &fv.Status); err != nil {
+			return nil, err
+		}
+		versions = append(versions, fv)
+	}
+	return versions, nil
 }
 
 func (s *SQLite) LatestPublishedVersion(flowID string) (FlowVersion, error) {
@@ -160,20 +197,20 @@ func (s *SQLite) GetFlowVersionByID(id string) (FlowVersion, error) {
 }
 
 type Task struct {
-	ID             string
-	FlowVersionID  string
-	Status         string
-	ParamsJSON     string
-	SharedJSON     string
-	CurrentNodeKey string
-	LastAction     string
-	StepCount      int
-	RetryStateJSON string
-	LeaseOwner     string
-	LeaseExpiry    int64
-	RequestID      string
-	CreatedAt      int64
-	UpdatedAt      int64
+	ID             string `json:"id"`
+	FlowVersionID  string `json:"flow_version_id"`
+	Status         string `json:"status"`
+	ParamsJSON     string `json:"params_json"`
+	SharedJSON     string `json:"shared_json"`
+	CurrentNodeKey string `json:"current_node_key"`
+	LastAction     string `json:"last_action"`
+	StepCount      int    `json:"step_count"`
+	RetryStateJSON string `json:"retry_state_json"`
+	LeaseOwner     string `json:"lease_owner"`
+	LeaseExpiry    int64  `json:"lease_expiry"`
+	RequestID      string `json:"request_id"`
+	CreatedAt      int64  `json:"created_at"`
+	UpdatedAt      int64  `json:"updated_at"`
 }
 
 func (s *SQLite) CreateTask(flowVersionID string, paramsJSON string, requestID string, startNode string) (string, error) {
@@ -293,19 +330,19 @@ func (s *SQLite) ListTasks(status string, limit int) ([]Task, error) {
 
 type NodeRun struct {
 	ID             string `json:"id"`
-	TaskID         string `json:"taskId"`
-	NodeKey        string `json:"nodeKey"`
-	AttemptNo      int    `json:"attemptNo"`
+	TaskID         string `json:"task_id"`
+	NodeKey        string `json:"node_key"`
+	AttemptNo      int    `json:"attempt_no"`
 	Status         string `json:"status"`
-	PrepJSON       string `json:"prepJson"`
-	ExecInputJSON  string `json:"execInputJson"`
-	ExecOutputJSON string `json:"execOutputJson"`
-	ErrorText      string `json:"errorText"`
+	PrepJSON       string `json:"prep_json"`
+	ExecInputJSON  string `json:"exec_input_json"`
+	ExecOutputJSON string `json:"exec_output_json"`
+	ErrorText      string `json:"error_text"`
 	Action         string `json:"action"`
-	StartedAt      int64  `json:"startedAt"`
-	FinishedAt     int64  `json:"finishedAt"`
-	WorkerID       string `json:"workerId"`
-	WorkerURL      string `json:"workerUrl"`
+	StartedAt      int64  `json:"started_at"`
+	FinishedAt     int64  `json:"finished_at"`
+	WorkerID       string `json:"worker_id"`
+	WorkerURL      string `json:"worker_url"`
 }
 
 func (s *SQLite) ListNodeRuns(taskID string) ([]NodeRun, error) {

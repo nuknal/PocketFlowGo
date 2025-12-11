@@ -15,28 +15,44 @@ import (
 type Server struct{ Store *store.SQLite }
 
 func writeJSON(w http.ResponseWriter, v interface{}, code int) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func withCORS(h http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Access-Control-Allow-Origin", "*")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        if r.Method == http.MethodOptions {
+            w.WriteHeader(204)
+            return
+        }
+        h(w, r)
+    }
+}
+
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/workers/register", s.handleRegisterWorker)
-	mux.HandleFunc("/workers/heartbeat", s.handleHeartbeat)
-	mux.HandleFunc("/workers/list", s.handleListWorkers)
-	mux.HandleFunc("/workers/allocate", s.handleAllocate)
-	mux.HandleFunc("/register", s.handleRegisterWorker)
-	mux.HandleFunc("/heartbeat", s.handleHeartbeat)
-	mux.HandleFunc("/list", s.handleListWorkers)
-	mux.HandleFunc("/allocate", s.handleAllocate)
-	mux.HandleFunc("/flows", s.handleFlows)
-	mux.HandleFunc("/flows/version", s.handleFlowVersion)
-	mux.HandleFunc("/tasks", s.handleTasks)
-	mux.HandleFunc("/tasks/get", s.handleGetTask)
-	mux.HandleFunc("/tasks/run_once", s.handleRunOnce)
-	mux.HandleFunc("/tasks/cancel", s.handleCancel)
-	mux.HandleFunc("/tasks/runs", s.handleTaskRuns)
-	mux.HandleFunc("/tasks/signal", s.handleTaskSignal)
+	mux.HandleFunc("/workers/register", withCORS(s.handleRegisterWorker))
+	mux.HandleFunc("/workers/heartbeat", withCORS(s.handleHeartbeat))
+	mux.HandleFunc("/workers/list", withCORS(s.handleListWorkers))
+	mux.HandleFunc("/workers/allocate", withCORS(s.handleAllocate))
+	mux.HandleFunc("/register", withCORS(s.handleRegisterWorker))
+	mux.HandleFunc("/heartbeat", withCORS(s.handleHeartbeat))
+	mux.HandleFunc("/list", withCORS(s.handleListWorkers))
+	mux.HandleFunc("/allocate", withCORS(s.handleAllocate))
+	mux.HandleFunc("/flows", withCORS(s.handleFlows))
+	mux.HandleFunc("/flows/version", withCORS(s.handleFlowVersion))
+	mux.HandleFunc("/tasks", withCORS(s.handleTasks))
+	mux.HandleFunc("/tasks/get", withCORS(s.handleGetTask))
+	mux.HandleFunc("/tasks/run_once", withCORS(s.handleRunOnce))
+	mux.HandleFunc("/tasks/cancel", withCORS(s.handleCancel))
+	mux.HandleFunc("/tasks/runs", withCORS(s.handleTaskRuns))
+	mux.HandleFunc("/tasks/signal", withCORS(s.handleTaskSignal))
 }
 
 func (s *Server) handleRegisterWorker(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +120,14 @@ func (s *Server) handleFlows(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]string{"id": id}, 200)
 		return
+	} else if r.Method == http.MethodGet {
+		flows, err := s.Store.ListFlows()
+		if err != nil {
+			writeJSON(w, map[string]string{"error": err.Error()}, 500)
+			return
+		}
+		writeJSON(w, flows, 200)
+		return
 	}
 	writeJSON(w, map[string]string{"error": "method"}, 405)
 }
@@ -124,6 +148,19 @@ func (s *Server) handleFlowVersion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, map[string]string{"id": id}, 200)
+		return
+	} else if r.Method == http.MethodGet {
+		flowID := r.URL.Query().Get("flow_id")
+		if flowID == "" {
+			writeJSON(w, map[string]string{"error": "missing flow_id"}, 400)
+			return
+		}
+		versions, err := s.Store.ListFlowVersions(flowID)
+		if err != nil {
+			writeJSON(w, map[string]string{"error": err.Error()}, 500)
+			return
+		}
+		writeJSON(w, versions, 200)
 		return
 	}
 	writeJSON(w, map[string]string{"error": "method"}, 405)
