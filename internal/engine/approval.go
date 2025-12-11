@@ -55,7 +55,7 @@ func (e *Engine) runApproval(t store.Task, def FlowDef, node DefNode, curr strin
 	}
 	rt[key] = ap
 	shared["_rt"] = rt
-	_ = e.Store.UpdateTaskStatus(t.ID, "running")
-	_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+    if e.Owner != "" { _ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running") } else { _ = e.Store.UpdateTaskStatus(t.ID, "running") }
+    if e.Owner != "" { _ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1) } else { _ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1) }
 	return nil
 }

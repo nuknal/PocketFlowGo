@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -43,7 +45,23 @@ func main() {
 	}()
 	go func() {
 		eng := engine.New(s)
-		owner := "scheduler"
+		eng.RegisterFunc("mul", func(ctx context.Context, input interface{}, params map[string]interface{}) (interface{}, error) {
+			f := 0.0
+			if v, ok := input.(float64); ok {
+				f = v
+			}
+			m := 1.0
+			if mv, ok := params["mul"].(float64); ok {
+				m = mv
+			}
+			return f * m, nil
+		})
+		owner := os.Getenv("SCHEDULER_OWNER")
+		if owner == "" {
+			hn, _ := os.Hostname()
+			owner = fmt.Sprintf("scheduler-%s-%d-%d", hn, os.Getpid(), time.Now().UnixNano())
+		}
+		eng.Owner = owner
 		ttl := int64(3)
 		for {
 			t, err := s.LeaseNextTask(owner, ttl)

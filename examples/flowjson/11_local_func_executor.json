@@ -1,0 +1,14 @@
+{
+  "start": "x",
+  "nodes": {
+    "x": {
+      "kind": "executor",
+      "exec_type": "local_func",
+      "func": "mul",
+      "prep": { "input_key": "$params.val" },
+      "params": { "mul": 2.0 },
+      "post": { "output_key": "out", "action_static": "" }
+    }
+  },
+  "edges": []
+}

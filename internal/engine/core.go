@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -11,12 +12,23 @@ import (
 )
 
 type Engine struct {
-	Store *store.SQLite
-	HTTP  *http.Client
-	Log   *log.Logger
+	Store      *store.SQLite
+	HTTP       *http.Client
+	Log        *log.Logger
+	Owner      string
+	LocalFuncs map[string]func(context.Context, interface{}, map[string]interface{}) (interface{}, error)
 }
 
-func New(s *store.SQLite) *Engine { return &Engine{Store: s, HTTP: &http.Client{}, Log: log.Default()} }
+func New(s *store.SQLite) *Engine {
+	return &Engine{Store: s, HTTP: &http.Client{}, Log: log.Default(), Owner: "", LocalFuncs: map[string]func(context.Context, interface{}, map[string]interface{}) (interface{}, error){}}
+}
+
+func (e *Engine) RegisterFunc(name string, fn func(context.Context, interface{}, map[string]interface{}) (interface{}, error)) {
+	if e.LocalFuncs == nil {
+		e.LocalFuncs = map[string]func(context.Context, interface{}, map[string]interface{}) (interface{}, error){}
+	}
+	e.LocalFuncs[name] = fn
+}
 
 func (e *Engine) logf(format string, args ...interface{}) {
 	if e.Log != nil {
@@ -48,8 +60,13 @@ func (e *Engine) buildInput(node DefNode, shared map[string]interface{}, params 
 func (e *Engine) cancelTask(t store.Task) error {
 	shared := map[string]interface{}{}
 	_ = json.Unmarshal([]byte(t.SharedJSON), &shared)
-	_ = e.Store.UpdateTaskStatus(t.ID, "canceled")
-	_ = e.Store.UpdateTaskProgress(t.ID, "", "canceled", toJSON(shared), t.StepCount)
+	if e.Owner != "" {
+		_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "canceled")
+		_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, "", "canceled", toJSON(shared), t.StepCount)
+	} else {
+		_ = e.Store.UpdateTaskStatus(t.ID, "canceled")
+		_ = e.Store.UpdateTaskProgress(t.ID, "", "canceled", toJSON(shared), t.StepCount)
+	}
 	e.logf("task=%s canceled node=%s", t.ID, t.CurrentNodeKey)
 	nr := map[string]interface{}{
 		"task_id":          t.ID,
@@ -93,18 +110,38 @@ func (e *Engine) finishNode(t store.Task, def FlowDef, curr string, action strin
 	st := ternary(execErr == nil, "ok", "error")
 	if execErr == nil {
 		if next == "" {
-			_ = e.Store.UpdateTaskStatus(t.ID, "completed")
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "completed")
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, "completed")
+			}
 		} else {
-			_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			}
 		}
 	} else {
 		if next == "" {
-			_ = e.Store.UpdateTaskStatus(t.ID, "failed")
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "failed")
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, "failed")
+			}
 		} else {
-			_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			}
 		}
 	}
-	_ = e.Store.UpdateTaskProgress(t.ID, next, action, toJSON(shared), stepCount)
+	if e.Owner != "" {
+		_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, next, action, toJSON(shared), stepCount)
+	} else {
+		_ = e.Store.UpdateTaskProgress(t.ID, next, action, toJSON(shared), stepCount)
+	}
 	e.logf("task=%s node=%s finish action=%s next=%s status=%s", t.ID, curr, action, next, st)
 	return nil
 }
@@ -113,6 +150,14 @@ func (e *Engine) RunOnce(taskID string) error {
 	t, err := e.Store.GetTask(taskID)
 	if err != nil {
 		return err
+	}
+	if e.Owner != "" {
+		if t.LeaseOwner != e.Owner {
+			return errorString("lease_mismatch")
+		}
+		if t.LeaseExpiry <= time.Now().Unix() {
+			return errorString("lease_expired")
+		}
 	}
 	if t.Status == "canceling" {
 		return e.cancelTask(t)

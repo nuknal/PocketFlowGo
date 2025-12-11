@@ -64,25 +64,25 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListWorkers(w http.ResponseWriter, r *http.Request) {
-    service := r.URL.Query().Get("service")
-    ttlS := r.URL.Query().Get("ttl")
-    ttl, _ := strconv.ParseInt(ttlS, 10, 64)
-    if ttl == 0 {
-        ttl = 15
-    }
-    _ = s.Store.RefreshWorkersStatus(ttl)
-    lst, _ := s.Store.ListWorkers(service, ttl)
-    writeJSON(w, lst, 200)
+	service := r.URL.Query().Get("service")
+	ttlS := r.URL.Query().Get("ttl")
+	ttl, _ := strconv.ParseInt(ttlS, 10, 64)
+	if ttl == 0 {
+		ttl = 15
+	}
+	_ = s.Store.RefreshWorkersStatus(ttl)
+	lst, _ := s.Store.ListWorkers(service, ttl)
+	writeJSON(w, lst, 200)
 }
 
 func (s *Server) handleAllocate(w http.ResponseWriter, r *http.Request) {
-    service := r.URL.Query().Get("service")
-    _ = s.Store.RefreshWorkersStatus(15)
-    lst, _ := s.Store.ListWorkers(service, 15)
-    if len(lst) == 0 {
-        writeJSON(w, map[string]string{"error": "no worker"}, 500)
-        return
-    }
+	service := r.URL.Query().Get("service")
+	_ = s.Store.RefreshWorkersStatus(15)
+	lst, _ := s.Store.ListWorkers(service, 15)
+	if len(lst) == 0 {
+		writeJSON(w, map[string]string{"error": "no worker"}, 500)
+		return
+	}
 	best := lst[0]
 	for _, wkr := range lst {
 		if wkr.Load < best.Load {
@@ -196,9 +196,18 @@ func (s *Server) handleRunOnce(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.URL.Query().Get("id")
 	eng := engine.New(s.Store)
+	owner := r.URL.Query().Get("owner")
+	if owner == "" {
+		owner = "manual"
+	}
+	eng.Owner = owner
 	err := eng.RunOnce(id)
 	if err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		code := 500
+		if err.Error() == "lease_mismatch" || err.Error() == "lease_expired" {
+			code = 409
+		}
+		writeJSON(w, map[string]string{"error": err.Error()}, code)
 		return
 	}
 	writeJSON(w, map[string]string{"ok": "1"}, 200)

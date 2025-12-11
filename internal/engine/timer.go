@@ -18,8 +18,8 @@ func (e *Engine) runTimer(t store.Task, def FlowDef, node DefNode, curr string, 
 		tm = map[string]interface{}{"start": now}
 		rt[key] = tm
 		shared["_rt"] = rt
-		_ = e.Store.UpdateTaskStatus(t.ID, "running")
-		_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+        if e.Owner != "" { _ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running") } else { _ = e.Store.UpdateTaskStatus(t.ID, "running") }
+        if e.Owner != "" { _ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1) } else { _ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1) }
 		return nil
 	}
 	delay := 0
@@ -51,7 +51,7 @@ func (e *Engine) runTimer(t store.Task, def FlowDef, node DefNode, curr string, 
 		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"delay_ms": delay}, input, nil, "", action, "", "")
 		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
 	}
-	_ = e.Store.UpdateTaskStatus(t.ID, "running")
-	_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+    if e.Owner != "" { _ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running") } else { _ = e.Store.UpdateTaskStatus(t.ID, "running") }
+    if e.Owner != "" { _ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1) } else { _ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1) }
 	return nil
 }

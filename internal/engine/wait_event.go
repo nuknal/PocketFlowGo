@@ -56,8 +56,8 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 			we["start"] = time.Now().UnixMilli()
 			rt[key] = we
 			shared["_rt"] = rt
-			_ = e.Store.UpdateTaskStatus(t.ID, "running")
-			_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+            if e.Owner != "" { _ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running") } else { _ = e.Store.UpdateTaskStatus(t.ID, "running") }
+            if e.Owner != "" { _ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1) } else { _ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1) }
 			return nil
 		}
 		action := node.Post.ActionStatic
@@ -82,7 +82,7 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 	}
 	rt[key] = we
 	shared["_rt"] = rt
-	_ = e.Store.UpdateTaskStatus(t.ID, "running")
-	_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+    if e.Owner != "" { _ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running") } else { _ = e.Store.UpdateTaskStatus(t.ID, "running") }
+    if e.Owner != "" { _ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1) } else { _ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1) }
 	return nil
 }

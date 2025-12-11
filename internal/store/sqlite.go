@@ -206,14 +206,19 @@ func (s *SQLite) LeaseNextTask(owner string, ttlSec int64) (Task, error) {
 			tx.Commit()
 		}
 	}()
-	row := tx.QueryRow("SELECT id FROM tasks WHERE status IN ('pending','running') AND (lease_expiry=0 OR lease_expiry<?) LIMIT 1", nowUnix())
+	now := nowUnix()
+	row := tx.QueryRow("SELECT id FROM tasks WHERE status IN ('pending','running') AND (lease_expiry=0 OR lease_expiry<?) ORDER BY updated_at ASC LIMIT 1", now)
 	var id string
 	if err = row.Scan(&id); err != nil {
 		return Task{}, err
 	}
-	_, err = tx.Exec("UPDATE tasks SET lease_owner=?, lease_expiry=?, status='running' WHERE id=?", owner, nowUnix()+ttlSec, id)
-	if err != nil {
-		return Task{}, err
+	res, uerr := tx.Exec("UPDATE tasks SET lease_owner=?, lease_expiry=?, status='running' WHERE id=? AND (lease_expiry=0 OR lease_expiry<?)", owner, now+ttlSec, id, now)
+	if uerr != nil {
+		return Task{}, uerr
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return Task{}, fmt.Errorf("lease_conflict")
 	}
 	return s.GetTask(id)
 }
@@ -225,6 +230,11 @@ func (s *SQLite) ExtendLease(id string, owner string, ttlSec int64) error {
 
 func (s *SQLite) UpdateTaskStatus(id string, status string) error {
 	_, err := s.DB.Exec("UPDATE tasks SET status=?, updated_at=? WHERE id=?", status, nowUnix(), id)
+	return err
+}
+
+func (s *SQLite) UpdateTaskStatusOwned(id string, owner string, status string) error {
+	_, err := s.DB.Exec("UPDATE tasks SET status=?, updated_at=? WHERE id=? AND lease_owner=? AND lease_expiry>?", status, nowUnix(), id, owner, nowUnix())
 	return err
 }
 
@@ -244,6 +254,11 @@ func (s *SQLite) SaveNodeRun(nr map[string]interface{}) error {
 
 func (s *SQLite) UpdateTaskProgress(id string, currentNode string, lastAction string, sharedJSON string, stepCount int) error {
 	_, err := s.DB.Exec("UPDATE tasks SET current_node_key=?, last_action=?, shared_json=?, step_count=?, updated_at=? WHERE id=?", currentNode, lastAction, sharedJSON, stepCount, nowUnix(), id)
+	return err
+}
+
+func (s *SQLite) UpdateTaskProgressOwned(id string, owner string, currentNode string, lastAction string, sharedJSON string, stepCount int) error {
+	_, err := s.DB.Exec("UPDATE tasks SET current_node_key=?, last_action=?, shared_json=?, step_count=?, updated_at=? WHERE id=? AND lease_owner=? AND lease_expiry>?", currentNode, lastAction, sharedJSON, stepCount, nowUnix(), id, owner, nowUnix())
 	return err
 }
 

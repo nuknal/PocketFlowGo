@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -511,6 +512,89 @@ func TestParallelFailFast(t *testing.T) {
 	t.Fatalf("not completed")
 }
 
+func TestParallelMixedExecTypes(t *testing.T) {
+	s := openTestStore(t)
+	srv := startWorker(t, s)
+	defer srv.Close()
+	fid, err := s.CreateFlow("pm1")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	def := map[string]interface{}{
+		"start": "p",
+		"nodes": map[string]interface{}{
+			"p": map[string]interface{}{
+				"kind":           "parallel",
+				"parallel_execs": []map[string]interface{}{{"service": "transform", "exec_type": "http", "params": map[string]interface{}{"mul": 2.0}}, {"service": "localMul", "exec_type": "local_func", "func": "mul", "params": map[string]interface{}{"mul": 5.0}}},
+				"parallel_mode":  "concurrent",
+				"prep":           map[string]interface{}{"input_key": "$params.val"},
+				"params":         map[string]interface{}{"mul": 1.0},
+				"post":           map[string]interface{}{"output_key": "agg", "action_static": "next"},
+			},
+			"end": map[string]interface{}{
+				"kind":    "executor",
+				"service": "transform",
+				"prep":    map[string]interface{}{"input_key": "$params.val"},
+				"params":  map[string]interface{}{"mul": 1.0},
+				"post":    map[string]interface{}{"action_static": ""},
+			},
+		},
+		"edges": []map[string]interface{}{{"from": "p", "action": "next", "to": "end"}},
+	}
+	b, _ := json.Marshal(def)
+	vid, err := s.CreateFlowVersion(fid, 1, string(b), "published")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	p := map[string]interface{}{"val": 3.0}
+	pb, _ := json.Marshal(p)
+	tid, err := s.CreateTask(vid, string(pb), "", "p")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	e := New(s)
+	e.RegisterFunc("mul", func(ctx context.Context, input interface{}, params map[string]interface{}) (interface{}, error) {
+		f := 0.0
+		if v, ok := input.(float64); ok {
+			f = v
+		}
+		m := 1.0
+		if mv, ok := params["mul"].(float64); ok {
+			m = mv
+		}
+		return f * m, nil
+	})
+	for i := 0; i < 50; i++ {
+		_ = e.RunOnce(tid)
+		nt, _ := s.GetTask(tid)
+		if nt.Status == "completed" || nt.CurrentNodeKey == "" {
+			var sh map[string]interface{}
+			_ = json.Unmarshal([]byte(nt.SharedJSON), &sh)
+			agg, _ := sh["agg"].([]interface{})
+			if len(agg) == 2 {
+				has6 := false
+				has15 := false
+				for _, v := range agg {
+					if f, ok := v.(float64); ok {
+						if f == 6.0 {
+							has6 = true
+						}
+						if f == 15.0 {
+							has15 = true
+						}
+					}
+				}
+				if !has6 || !has15 {
+					t.Fatalf("agg mismatch")
+				}
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("not completed")
+}
+
 func TestTimerNode(t *testing.T) {
 	s := openTestStore(t)
 	srv := startWorker(t, s)
@@ -680,6 +764,234 @@ func TestApprovalNode(t *testing.T) {
 		_ = e.RunOnce(tid)
 		nt2, _ := s.GetTask(tid)
 		if nt2.Status == "completed" || nt2.CurrentNodeKey == "" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("not completed")
+}
+
+func TestLocalFuncExecutor(t *testing.T) {
+	s := openTestStore(t)
+	fid, err := s.CreateFlow("lf1")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	def := map[string]interface{}{
+		"start": "x",
+		"nodes": map[string]interface{}{
+			"x": map[string]interface{}{
+				"kind":      "executor",
+				"exec_type": "local_func",
+				"func":      "mul",
+				"prep":      map[string]interface{}{"input_key": "$params.val"},
+				"params":    map[string]interface{}{"mul": 2.0},
+				"post":      map[string]interface{}{"output_key": "out", "action_static": ""},
+			},
+		},
+		"edges": []map[string]interface{}{},
+	}
+	b, _ := json.Marshal(def)
+	vid, err := s.CreateFlowVersion(fid, 1, string(b), "published")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	p := map[string]interface{}{"val": 3.0}
+	pb, _ := json.Marshal(p)
+	tid, err := s.CreateTask(vid, string(pb), "", "x")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	e := New(s)
+	e.RegisterFunc("mul", func(ctx context.Context, input interface{}, params map[string]interface{}) (interface{}, error) {
+		f := 0.0
+		if v, ok := input.(float64); ok {
+			f = v
+		}
+		m := 1.0
+		if mv, ok := params["mul"].(float64); ok {
+			m = mv
+		}
+		return f * m, nil
+	})
+	for i := 0; i < 10; i++ {
+		_ = e.RunOnce(tid)
+		nt, _ := s.GetTask(tid)
+		if nt.Status == "completed" || nt.CurrentNodeKey == "" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("not completed")
+}
+
+func TestLocalScriptExecutor(t *testing.T) {
+	s := openTestStore(t)
+	fid, err := s.CreateFlow("ls1")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	def := map[string]interface{}{
+		"start": "x",
+		"nodes": map[string]interface{}{
+			"x": map[string]interface{}{
+				"kind":      "executor",
+				"exec_type": "local_script",
+				"script":    map[string]interface{}{"cmd": "bash", "args": []string{"-c", "echo '{\"v\":42}'"}, "stdin_mode": "none", "output_mode": "json", "timeout_ms": 2000},
+				"prep":      map[string]interface{}{"input_key": "$params.val"},
+				"params":    map[string]interface{}{"mul": 2.0},
+				"post":      map[string]interface{}{"output_key": "out", "action_static": ""},
+			},
+		},
+		"edges": []map[string]interface{}{},
+	}
+	b, _ := json.Marshal(def)
+	vid, err := s.CreateFlowVersion(fid, 1, string(b), "published")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	p := map[string]interface{}{"val": 3.0}
+	pb, _ := json.Marshal(p)
+	tid, err := s.CreateTask(vid, string(pb), "", "x")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	e := New(s)
+	for i := 0; i < 20; i++ {
+		_ = e.RunOnce(tid)
+		nt, _ := s.GetTask(tid)
+		if nt.Status == "completed" || nt.CurrentNodeKey == "" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("not completed")
+}
+
+func TestForeachLocalFunc(t *testing.T) {
+	s := openTestStore(t)
+	fid, err := s.CreateFlow("fe_local")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	def := map[string]interface{}{
+		"start": "fe",
+		"nodes": map[string]interface{}{
+			"fe":  map[string]interface{}{"kind": "foreach", "exec_type": "local_func", "func": "mul", "prep": map[string]interface{}{"input_key": "$shared.arr"}, "params": map[string]interface{}{"mul": 2.0}, "post": map[string]interface{}{"output_key": "mapped", "action_static": "go"}, "parallel_mode": "sequential", "foreach_execs": []map[string]interface{}{{"index": 1, "params": map[string]interface{}{"mul": 4.0}}, {"index": 2, "params": map[string]interface{}{"mul": 5.0}}}},
+			"end": map[string]interface{}{"kind": "executor", "exec_type": "local_func", "func": "mul", "prep": map[string]interface{}{"input_key": "$params.val"}, "params": map[string]interface{}{"mul": 1.0}, "post": map[string]interface{}{"action_static": ""}},
+		},
+		"edges": []map[string]interface{}{{"from": "fe", "action": "go", "to": "end"}},
+	}
+	b, _ := json.Marshal(def)
+	vid, err := s.CreateFlowVersion(fid, 1, string(b), "published")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	p := map[string]interface{}{"val": 2.0}
+	pb, _ := json.Marshal(p)
+	tid, err := s.CreateTask(vid, string(pb), "", "fe")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	tsk, _ := s.GetTask(tid)
+	sh := map[string]interface{}{"arr": []interface{}{1.0, 2.0, 3.0}}
+	shb, _ := json.Marshal(sh)
+	_ = s.UpdateTaskProgress(tsk.ID, tsk.CurrentNodeKey, "", string(shb), tsk.StepCount)
+	e := New(s)
+	e.RegisterFunc("mul", func(ctx context.Context, input interface{}, params map[string]interface{}) (interface{}, error) {
+		f := 0.0
+		if v, ok := input.(float64); ok {
+			f = v
+		}
+		m := 1.0
+		if mv, ok := params["mul"].(float64); ok {
+			m = mv
+		}
+		return f * m, nil
+	})
+	for i := 0; i < 100; i++ {
+		_ = e.RunOnce(tid)
+		nt, _ := s.GetTask(tid)
+		if nt.Status == "completed" || nt.CurrentNodeKey == "" {
+			var sh map[string]interface{}
+			_ = json.Unmarshal([]byte(nt.SharedJSON), &sh)
+			mapped, _ := sh["mapped"].([]interface{})
+			if len(mapped) == 3 {
+				if f0, ok := mapped[0].(float64); !ok || f0 != 2.0 {
+					t.Fatalf("mapped[0]")
+				}
+				if f1, ok := mapped[1].(float64); !ok || f1 != 8.0 {
+					t.Fatalf("mapped[1]")
+				}
+				if f2, ok := mapped[2].(float64); !ok || f2 != 15.0 {
+					t.Fatalf("mapped[2]")
+				}
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("not completed")
+}
+
+func TestSubflowExecOverride(t *testing.T) {
+	s := openTestStore(t)
+	srv := startWorker(t, s)
+	defer srv.Close()
+	fid, err := s.CreateFlow("sfov")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	sub := map[string]interface{}{
+		"start": "a",
+		"nodes": map[string]interface{}{
+			"a": map[string]interface{}{"kind": "executor", "service": "transform", "prep": map[string]interface{}{"input_key": "$params.val"}, "params": map[string]interface{}{"mul": 2.0}, "post": map[string]interface{}{"output_key": "m", "action_static": "go"}},
+			"b": map[string]interface{}{"kind": "executor", "service": "route", "prep": map[string]interface{}{"input_key": "m"}, "params": map[string]interface{}{"action": "goC"}, "post": map[string]interface{}{"action_static": "done"}},
+		},
+		"edges": []map[string]interface{}{{"from": "a", "action": "go", "to": "b"}},
+	}
+	def := map[string]interface{}{
+		"start": "sf",
+		"nodes": map[string]interface{}{
+			"sf":  map[string]interface{}{"kind": "subflow", "subflow": sub, "post": map[string]interface{}{"output_key": "sub_out", "action_static": "next"}, "subflow_execs": []map[string]interface{}{{"node": "a", "exec_type": "local_func", "func": "mul", "params": map[string]interface{}{"mul": 7.0}}}},
+			"end": map[string]interface{}{"kind": "executor", "service": "transform", "prep": map[string]interface{}{"input_key": "$params.val"}, "params": map[string]interface{}{"mul": 1.0}, "post": map[string]interface{}{"action_static": ""}},
+		},
+		"edges": []map[string]interface{}{{"from": "sf", "action": "next", "to": "end"}},
+	}
+	b, _ := json.Marshal(def)
+	vid, err := s.CreateFlowVersion(fid, 1, string(b), "published")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	p := map[string]interface{}{"val": 2.0}
+	pb, _ := json.Marshal(p)
+	tid, err := s.CreateTask(vid, string(pb), "", "sf")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	e := New(s)
+	e.RegisterFunc("mul", func(ctx context.Context, input interface{}, params map[string]interface{}) (interface{}, error) {
+		f := 0.0
+		if v, ok := input.(float64); ok {
+			f = v
+		}
+		m := 1.0
+		if mv, ok := params["mul"].(float64); ok {
+			m = mv
+		}
+		return f * m, nil
+	})
+	for i := 0; i < 50; i++ {
+		_ = e.RunOnce(tid)
+		nt, _ := s.GetTask(tid)
+		if nt.Status == "completed" || nt.CurrentNodeKey == "" {
+			var sh map[string]interface{}
+			_ = json.Unmarshal([]byte(nt.SharedJSON), &sh)
+			so, _ := sh["sub_out"].(map[string]interface{})
+			mv, _ := so["m"].(float64)
+			if mv != 14.0 {
+				t.Fatalf("subflow override failed")
+			}
 			return
 		}
 		time.Sleep(10 * time.Millisecond)

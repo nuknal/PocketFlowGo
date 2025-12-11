@@ -1,10 +1,21 @@
 package engine
 
 type DefNode struct {
-	Kind    string                 `json:"kind"`
-	Service string                 `json:"service"`
-	Params  map[string]interface{} `json:"params"`
-	Prep    struct {
+	Kind     string `json:"kind"`
+	Service  string `json:"service"`
+	ExecType string `json:"exec_type"`
+	Func     string `json:"func"`
+	Script   struct {
+		Cmd           string            `json:"cmd"`
+		Args          []string          `json:"args"`
+		TimeoutMillis int               `json:"timeout_ms"`
+		Env           map[string]string `json:"env"`
+		WorkDir       string            `json:"work_dir"`
+		StdinMode     string            `json:"stdin_mode"`
+		OutputMode    string            `json:"output_mode"`
+	} `json:"script"`
+	Params map[string]interface{} `json:"params"`
+	Prep   struct {
 		InputKey string            `json:"input_key"`
 		InputMap map[string]string `json:"input_map"`
 	} `json:"prep"`
@@ -20,9 +31,12 @@ type DefNode struct {
 	AttemptDelayMillis int           `json:"attempt_delay_ms"`
 	WeightedByLoad     bool          `json:"weighted_by_load"`
 	ParallelServices   []string      `json:"parallel_services"`
+	ParallelExecs      []ExecSpec    `json:"parallel_execs"`
+	ForeachExecs       []ExecSpec    `json:"foreach_execs"`
 	ChoiceKey          string        `json:"choice_key"`
 	DefaultAction      string        `json:"default_action"`
 	Subflow            *EmbeddedFlow `json:"subflow"`
+	SubflowExecs       []ExecSpec    `json:"subflow_execs"`
 	ChoiceCases        []ChoiceCase  `json:"choice_cases"`
 	ParallelMode       string        `json:"parallel_mode"`
 	MaxParallel        int           `json:"max_parallel"`
@@ -50,4 +64,22 @@ type EmbeddedFlow struct {
 type ChoiceCase struct {
 	Action string                 `json:"action"`
 	Expr   map[string]interface{} `json:"expr"`
+}
+
+type ExecSpec struct {
+	Service  string                 `json:"service"`
+	ExecType string                 `json:"exec_type"`
+	Func     string                 `json:"func"`
+	Params   map[string]interface{} `json:"params"`
+	Node     string                 `json:"node"`
+	Index    int                    `json:"index"`
+	Script   struct {
+		Cmd           string            `json:"cmd"`
+		Args          []string          `json:"args"`
+		TimeoutMillis int               `json:"timeout_ms"`
+		Env           map[string]string `json:"env"`
+		WorkDir       string            `json:"work_dir"`
+		StdinMode     string            `json:"stdin_mode"`
+		OutputMode    string            `json:"output_mode"`
+	} `json:"script"`
 }

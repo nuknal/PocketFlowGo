@@ -6,6 +6,14 @@ import (
 
 func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
 	svcs := node.ParallelServices
+	specs := map[string]ExecSpec{}
+	if len(node.ParallelExecs) > 0 {
+		svcs = []string{}
+		for _, sp := range node.ParallelExecs {
+			svcs = append(svcs, sp.Service)
+			specs[sp.Service] = sp
+		}
+	}
 	if len(svcs) == 0 {
 		if arr, ok := params["services"].([]interface{}); ok {
 			for _, x := range arr {
@@ -17,8 +25,16 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 	}
 	if len(svcs) == 0 {
 		e.recordRun(t, curr, 1, "error", map[string]interface{}{"input_key": node.Prep.InputKey}, input, nil, "no services", "", "", "")
-		_ = e.Store.UpdateTaskStatus(t.ID, "running")
-		_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+		} else {
+			_ = e.Store.UpdateTaskStatus(t.ID, "running")
+		}
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+		} else {
+			_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		}
 		return nil
 	}
 	rt, _ := shared["_rt"].(map[string]interface{})
@@ -85,8 +101,28 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 		ch := make(chan br, len(toRun))
 		for _, sname := range toRun {
 			go func(sv string) {
-				sub := DefNode{Service: sv, WeightedByLoad: node.WeightedByLoad, MaxAttempts: node.MaxAttempts, AttemptDelayMillis: node.AttemptDelayMillis}
-				r, wid, wurl, er := e.execExecutor(sub, input, params)
+				use := DefNode{Service: sv, ExecType: node.ExecType, Func: node.Func, Script: node.Script, WeightedByLoad: node.WeightedByLoad, MaxAttempts: node.MaxAttempts, AttemptDelayMillis: node.AttemptDelayMillis}
+				callParams := map[string]interface{}{}
+				for k, v := range params {
+					callParams[k] = v
+				}
+				if sp, ok := specs[sv]; ok {
+					if sp.ExecType != "" {
+						use.ExecType = sp.ExecType
+					}
+					if sp.Func != "" {
+						use.Func = sp.Func
+					}
+					if sp.Script.Cmd != "" {
+						use.Script = sp.Script
+					}
+					if sp.Params != nil {
+						for k, v := range sp.Params {
+							callParams[k] = v
+						}
+					}
+				}
+				r, wid, wurl, er := e.execExecutor(use, input, callParams)
 				ch <- br{svc: sv, res: r, wid: wid, wurl: wurl, err: er}
 			}(sname)
 		}
@@ -125,12 +161,28 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 				action = pickAction(map[string]interface{}{"result": agg}, node.Post.ActionKey)
 			}
 			next := findNext(def.Edges, curr, action)
-			_ = e.Store.UpdateTaskStatus(t.ID, ternary(next == "", "failed", "running"))
-			_ = e.Store.UpdateTaskProgress(t.ID, next, action, toJSON(shared), t.StepCount+1)
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, ternary(next == "", "failed", "running"))
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, ternary(next == "", "failed", "running"))
+			}
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, next, action, toJSON(shared), t.StepCount+1)
+			} else {
+				_ = e.Store.UpdateTaskProgress(t.ID, next, action, toJSON(shared), t.StepCount+1)
+			}
 			return nil
 		}
-		_ = e.Store.UpdateTaskStatus(t.ID, "running")
-		_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+		} else {
+			_ = e.Store.UpdateTaskStatus(t.ID, "running")
+		}
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+		} else {
+			_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		}
 		return nil
 	}
 	var nextSvc string
@@ -141,16 +193,44 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 		}
 	}
 	e.logf("task=%s node=%s parallel next=%s", t.ID, curr, nextSvc)
-	sub := DefNode{Service: nextSvc, WeightedByLoad: node.WeightedByLoad, MaxAttempts: node.MaxAttempts, AttemptDelayMillis: node.AttemptDelayMillis}
-	execRes, workerID, workerURL, execErr := e.execExecutor(sub, input, params)
+	use := DefNode{Service: nextSvc, ExecType: node.ExecType, Func: node.Func, Script: node.Script, WeightedByLoad: node.WeightedByLoad, MaxAttempts: node.MaxAttempts, AttemptDelayMillis: node.AttemptDelayMillis}
+	callParams := map[string]interface{}{}
+	for k, v := range params {
+		callParams[k] = v
+	}
+	if sp, ok := specs[nextSvc]; ok {
+		if sp.ExecType != "" {
+			use.ExecType = sp.ExecType
+		}
+		if sp.Func != "" {
+			use.Func = sp.Func
+		}
+		if sp.Script.Cmd != "" {
+			use.Script = sp.Script
+		}
+		if sp.Params != nil {
+			for k, v := range sp.Params {
+				callParams[k] = v
+			}
+		}
+	}
+	execRes, workerID, workerURL, execErr := e.execExecutor(use, input, callParams)
 	e.recordRun(t, curr, 1, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"input_key": node.Prep.InputKey, "branch": nextSvc}, input, execRes, errString(execErr), "", workerID, workerURL)
 	if execErr != nil {
 		errs[nextSvc] = errString(execErr)
 		pl["errs"] = errs
 		rt[key] = pl
 		shared["_rt"] = rt
-		_ = e.Store.UpdateTaskStatus(t.ID, "running")
-		_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+		} else {
+			_ = e.Store.UpdateTaskStatus(t.ID, "running")
+		}
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+		} else {
+			_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		}
 		return nil
 	}
 	done[nextSvc] = execRes

@@ -71,10 +71,34 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 			err  error
 		}
 		ch := make(chan br, len(sel))
+		specByIdx := map[int]ExecSpec{}
+		for _, sp := range node.ForeachExecs {
+			specByIdx[sp.Index] = sp
+		}
 		for _, i := range sel {
 			go func(ii int, it interface{}) {
-				sub := DefNode{Service: node.Service, WeightedByLoad: node.WeightedByLoad, MaxAttempts: node.MaxAttempts, AttemptDelayMillis: node.AttemptDelayMillis}
-				r, wid, wurl, er := e.execExecutor(sub, it, params)
+				use := DefNode{Service: node.Service, ExecType: node.ExecType, Func: node.Func, Script: node.Script, WeightedByLoad: node.WeightedByLoad, MaxAttempts: node.MaxAttempts, AttemptDelayMillis: node.AttemptDelayMillis}
+				callParams := map[string]interface{}{}
+				for k, v := range params {
+					callParams[k] = v
+				}
+				if sp, ok := specByIdx[ii]; ok {
+					if sp.ExecType != "" {
+						use.ExecType = sp.ExecType
+					}
+					if sp.Func != "" {
+						use.Func = sp.Func
+					}
+					if sp.Script.Cmd != "" {
+						use.Script = sp.Script
+					}
+					if sp.Params != nil {
+						for k, v := range sp.Params {
+							callParams[k] = v
+						}
+					}
+				}
+				r, wid, wurl, er := e.execExecutor(use, it, callParams)
 				ch <- br{idx: ii, res: r, wid: wid, wurl: wurl, err: er}
 			}(i, items[i])
 		}
@@ -108,12 +132,28 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 				shared[node.Post.OutputKey] = agg
 			}
 			next := findNext(def.Edges, curr, action)
-			_ = e.Store.UpdateTaskStatus(t.ID, ternary(next == "", "failed", "running"))
-			_ = e.Store.UpdateTaskProgress(t.ID, next, action, toJSON(shared), t.StepCount+1)
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, ternary(next == "", "failed", "running"))
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, ternary(next == "", "failed", "running"))
+			}
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, next, action, toJSON(shared), t.StepCount+1)
+			} else {
+				_ = e.Store.UpdateTaskProgress(t.ID, next, action, toJSON(shared), t.StepCount+1)
+			}
 			return nil
 		}
-		_ = e.Store.UpdateTaskStatus(t.ID, "running")
-		_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+		} else {
+			_ = e.Store.UpdateTaskStatus(t.ID, "running")
+		}
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+		} else {
+			_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		}
 		return nil
 	}
 	idx := -1
@@ -121,16 +161,48 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 		idx = i
 		break
 	}
-	sub := DefNode{Service: node.Service, WeightedByLoad: node.WeightedByLoad, MaxAttempts: node.MaxAttempts, AttemptDelayMillis: node.AttemptDelayMillis}
-	execRes, workerID, workerURL, execErr := e.execExecutor(sub, items[idx], params)
+	use := DefNode{Service: node.Service, ExecType: node.ExecType, Func: node.Func, Script: node.Script, WeightedByLoad: node.WeightedByLoad, MaxAttempts: node.MaxAttempts, AttemptDelayMillis: node.AttemptDelayMillis}
+	specByIdx := map[int]ExecSpec{}
+	for _, sp := range node.ForeachExecs {
+		specByIdx[sp.Index] = sp
+	}
+	callParams := map[string]interface{}{}
+	for k, v := range params {
+		callParams[k] = v
+	}
+	if sp, ok := specByIdx[idx]; ok {
+		if sp.ExecType != "" {
+			use.ExecType = sp.ExecType
+		}
+		if sp.Func != "" {
+			use.Func = sp.Func
+		}
+		if sp.Script.Cmd != "" {
+			use.Script = sp.Script
+		}
+		if sp.Params != nil {
+			for k, v := range sp.Params {
+				callParams[k] = v
+			}
+		}
+	}
+	execRes, workerID, workerURL, execErr := e.execExecutor(use, items[idx], callParams)
 	e.recordRun(t, curr, 1, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"branch": idx}, items[idx], execRes, errString(execErr), "", workerID, workerURL)
 	if execErr != nil {
 		errs[indexKey(idx)] = errString(execErr)
 		fe["errs"] = errs
 		rt[key] = fe
 		shared["_rt"] = rt
-		_ = e.Store.UpdateTaskStatus(t.ID, "running")
-		_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+		} else {
+			_ = e.Store.UpdateTaskStatus(t.ID, "running")
+		}
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+		} else {
+			_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		}
 		return nil
 	}
 	done[indexKey(idx)] = execRes

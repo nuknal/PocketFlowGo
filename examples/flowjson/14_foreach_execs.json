@@ -1,0 +1,27 @@
+{
+  "start": "fe",
+  "nodes": {
+    "fe": {
+      "kind": "foreach",
+      "exec_type": "local_func",
+      "func": "mul",
+      "prep": { "input_key": "$shared.arr" },
+      "params": { "mul": 2.0 },
+      "foreach_execs": [
+        { "index": 1, "params": { "mul": 4.0 } },
+        { "index": 2, "params": { "mul": 5.0 } }
+      ],
+      "post": { "output_key": "mapped", "action_static": "go" },
+      "parallel_mode": "sequential"
+    },
+    "end": {
+      "kind": "executor",
+      "exec_type": "local_func",
+      "func": "mul",
+      "prep": { "input_key": "$params.val" },
+      "params": { "mul": 1.0 },
+      "post": { "action_static": "" }
+    }
+  },
+  "edges": [ { "from": "fe", "action": "go", "to": "end" } ]
+}

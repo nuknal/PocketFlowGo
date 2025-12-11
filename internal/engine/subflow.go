@@ -31,8 +31,16 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 		if nt > 0 && now < nt {
 			rt[key] = sf
 			shared["_rt"] = rt
-			_ = e.Store.UpdateTaskStatus(t.ID, "running")
-			_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			}
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+			} else {
+				_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+			}
 			return nil
 		}
 	}
@@ -41,11 +49,23 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, nil, nil, "", action, "", "")
 		next := findNext(def.Edges, curr, action)
 		if next == "" {
-			_ = e.Store.UpdateTaskStatus(t.ID, "completed")
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "completed")
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, "completed")
+			}
 		} else {
-			_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			}
 		}
-		_ = e.Store.UpdateTaskProgress(t.ID, next, action, toJSON(shared), t.StepCount+1)
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, next, action, toJSON(shared), t.StepCount+1)
+		} else {
+			_ = e.Store.UpdateTaskProgress(t.ID, next, action, toJSON(shared), t.StepCount+1)
+		}
 		e.logf("task=%s node=%s kind=subflow complete action=%s next=%s", t.ID, curr, action, next)
 		return nil
 	}
@@ -78,7 +98,39 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 			subInput = subShared[sn.Prep.InputKey]
 		}
 	}
-	execRes, workerID, workerURL, execErr := e.execExecutor(sn, subInput, childParams)
+	eff := sn
+	if eff.ExecType == "" && node.ExecType != "" {
+		eff.ExecType = node.ExecType
+	}
+	if eff.Func == "" && node.Func != "" {
+		eff.Func = node.Func
+	}
+	if eff.Script.Cmd == "" && node.Script.Cmd != "" {
+		eff.Script = node.Script
+	}
+	for _, sp := range node.SubflowExecs {
+		if sp.Node == currSub {
+			if sp.Service != "" {
+				eff.Service = sp.Service
+			}
+			if sp.ExecType != "" {
+				eff.ExecType = sp.ExecType
+			}
+			if sp.Func != "" {
+				eff.Func = sp.Func
+			}
+			if sp.Script.Cmd != "" {
+				eff.Script = sp.Script
+			}
+			if sp.Params != nil {
+				for k, v := range sp.Params {
+					childParams[k] = v
+				}
+			}
+			break
+		}
+	}
+	execRes, workerID, workerURL, execErr := e.execExecutor(eff, subInput, childParams)
 	subAction := ""
 	if execErr == nil {
 		if sn.Post.OutputMap != nil {
@@ -117,8 +169,16 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 			} else {
 				rt[key] = sf
 				shared["_rt"] = rt
-				_ = e.Store.UpdateTaskStatus(t.ID, "running")
-				_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+				if e.Owner != "" {
+					_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+				} else {
+					_ = e.Store.UpdateTaskStatus(t.ID, "running")
+				}
+				if e.Owner != "" {
+					_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+				} else {
+					_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+				}
 				return nil
 			}
 		}
@@ -159,11 +219,23 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 		}
 		next := findNext(def.Edges, curr, action)
 		if next == "" {
-			_ = e.Store.UpdateTaskStatus(t.ID, "completed")
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "completed")
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, "completed")
+			}
 		} else {
-			_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			}
 		}
-		_ = e.Store.UpdateTaskProgress(t.ID, next, action, toJSON(shared), t.StepCount+1)
+		if e.Owner != "" {
+			_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, next, action, toJSON(shared), t.StepCount+1)
+		} else {
+			_ = e.Store.UpdateTaskProgress(t.ID, next, action, toJSON(shared), t.StepCount+1)
+		}
 		e.logf("task=%s node=%s kind=subflow finish action=%s next=%s", t.ID, curr, action, next)
 		return nil
 	}
@@ -171,7 +243,15 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	sf["shared"] = subShared
 	rt[key] = sf
 	shared["_rt"] = rt
-	_ = e.Store.UpdateTaskStatus(t.ID, "running")
-	_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+	if e.Owner != "" {
+		_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+	} else {
+		_ = e.Store.UpdateTaskStatus(t.ID, "running")
+	}
+	if e.Owner != "" {
+		_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+	} else {
+		_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+	}
 	return nil
 }
