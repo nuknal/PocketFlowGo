@@ -7,15 +7,27 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [workers, setWorkers] = useState<Worker[]>([])
   const [loading, setLoading] = useState(true)
+  const [counts, setCounts] = useState({
+    total: 0,
+    pending: 0,
+    failed: 0,
+  })
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tasksData, workersData] = await Promise.all([
-          api.getTasks(),
+        const [recentTasks, pending, failed, workersData] = await Promise.all([
+          api.getTasks(undefined, undefined, 1, 5),
+          api.getTasks('pending', undefined, 1, 1),
+          api.getTasks('failed', undefined, 1, 1),
           api.getWorkers(),
         ])
-        setTasks(tasksData || [])
+        setTasks(recentTasks.data || [])
+        setCounts({
+          total: recentTasks.total,
+          pending: pending.total,
+          failed: failed.total,
+        })
         setWorkers(workersData || [])
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error)
@@ -30,10 +42,10 @@ export default function Dashboard() {
   }, [])
 
   const stats = {
-    totalTasks: tasks.length,
-    activeWorkers: workers.filter((w) => w.status === 'online').length, // Backend returns "online"
-    pendingTasks: tasks.filter((t) => t.status === 'pending').length,
-    failedTasks: tasks.filter((t) => t.status === 'failed').length,
+    totalTasks: counts.total,
+    activeWorkers: workers.filter((w) => w.status === 'online').length,
+    pendingTasks: counts.pending,
+    failedTasks: counts.failed,
   }
 
   return (

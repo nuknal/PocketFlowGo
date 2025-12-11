@@ -93,8 +93,8 @@ export default function FlowDetails() {
       // Fetch tasks for this version
       const fetchTasks = async () => {
         try {
-          const data = await api.getTasks(undefined, selectedVersion.id)
-          setTasks(data || [])
+          const data = await api.getTasks(undefined, selectedVersion.id, 1, 5)
+          setTasks(data.data || [])
         } catch (error) {
           console.error('Failed to fetch tasks:', error)
         }

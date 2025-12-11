@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -36,8 +35,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Search, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { api, type Task, type Flow } from '@/lib/api'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -61,9 +68,10 @@ const getStatusBadge = (status: string) => {
 export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [flows, setFlows] = useState<Flow[]>([])
-  const [filteredTasks, setFilteredTasks] = useState<Task[]>([])
   const [statusFilter, setStatusFilter] = useState('all')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(10)
+  const [total, setTotal] = useState(0)
 
   // Create Task State
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -74,10 +82,14 @@ export default function Tasks() {
   const fetchData = async () => {
     try {
       const [tasksData, flowsData] = await Promise.all([
-        api.getTasks(),
-        api.getFlows().catch(() => []),
+        api.getTasks(statusFilter, undefined, page, pageSize),
+        api
+          .getFlows(1, 100)
+          .then((res) => res.data)
+          .catch(() => []),
       ])
-      setTasks(tasksData || [])
+      setTasks(tasksData.data || [])
+      setTotal(tasksData.total || 0)
       setFlows(flowsData || [])
     } catch (error) {
       console.error('Failed to fetch data:', error)
@@ -88,23 +100,7 @@ export default function Tasks() {
     fetchData()
     const interval = setInterval(fetchData, 5000)
     return () => clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
-    let result = tasks
-
-    if (statusFilter !== 'all') {
-      result = result.filter((t) => t.status === statusFilter)
-    }
-
-    if (searchQuery) {
-      result = result.filter((t) =>
-        t.id.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
-
-    setFilteredTasks(result)
-  }, [tasks, statusFilter, searchQuery])
+  }, [statusFilter, page, pageSize])
 
   const handleCreateTask = async () => {
     if (!selectedFlowId) return
@@ -213,15 +209,6 @@ export default function Tasks() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search tasks..."
-                  className="pl-8 w-[250px]"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Status" />
@@ -253,7 +240,7 @@ export default function Tasks() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredTasks.map((task) => (
+              {tasks.map((task) => (
                 <TableRow key={task.id}>
                   <TableCell className="font-medium font-mono text-xs">
                     <Link to={`/tasks/${task.id}`} className="hover:underline">
@@ -275,7 +262,9 @@ export default function Tasks() {
                       </div>
                     ) : (
                       <Link
-                        to={`/flows/${task.flow_id || task.flow_version_id.split('-')[0]}?version=${task.flow_version_id}`}
+                        to={`/flows/${
+                          task.flow_id || task.flow_version_id.split('-')[0]
+                        }?version=${task.flow_version_id}`}
                         className="hover:underline hover:text-blue-600"
                       >
                         {task.flow_version_id}
@@ -297,7 +286,7 @@ export default function Tasks() {
                   </TableCell>
                 </TableRow>
               ))}
-              {filteredTasks.length === 0 && (
+              {tasks.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={7}
@@ -309,6 +298,64 @@ export default function Tasks() {
               )}
             </TableBody>
           </Table>
+          <Pagination className="justify-end py-4">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => page > 1 && setPage(page - 1)}
+                  className={
+                    page <= 1
+                      ? 'pointer-events-none opacity-50'
+                      : 'cursor-pointer'
+                  }
+                />
+              </PaginationItem>
+              {Array.from(
+                { length: Math.ceil(total / pageSize) },
+                (_, i) => i + 1
+              )
+                .filter(
+                  (p) =>
+                    p === 1 ||
+                    p === Math.ceil(total / pageSize) ||
+                    (p >= page - 1 && p <= page + 1)
+                )
+                .map((p, i, arr) => {
+                  if (i > 0 && arr[i] - arr[i - 1] > 1) {
+                    return (
+                      <PaginationItem key={`ellipsis-${i}`}>
+                        <span className="flex h-9 w-9 items-center justify-center text-muted-foreground">
+                          ...
+                        </span>
+                      </PaginationItem>
+                    )
+                  }
+                  return (
+                    <PaginationItem key={p}>
+                      <PaginationLink
+                        onClick={() => setPage(p)}
+                        isActive={page === p}
+                        className="cursor-pointer"
+                      >
+                        {p}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                })}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() =>
+                    page < Math.ceil(total / pageSize) && setPage(page + 1)
+                  }
+                  className={
+                    page >= Math.ceil(total / pageSize)
+                      ? 'pointer-events-none opacity-50'
+                      : 'cursor-pointer'
+                  }
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </CardContent>
       </Card>
     </div>

@@ -62,6 +62,13 @@ export interface FlowVersion {
   status: string
 }
 
+export interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  size: number
+}
+
 export const api = {
   getWorkers: async (service?: string, ttl?: number): Promise<Worker[]> => {
     const params = new URLSearchParams()
@@ -74,11 +81,15 @@ export const api = {
 
   getTasks: async (
     status?: string,
-    flowVersionId?: string
-  ): Promise<Task[]> => {
+    flowVersionId?: string,
+    page: number = 1,
+    pageSize: number = 10
+  ): Promise<PaginatedResponse<Task>> => {
     const params = new URLSearchParams()
     if (status && status !== 'all') params.append('status', status)
     if (flowVersionId) params.append('flow_version_id', flowVersionId)
+    params.append('page', page.toString())
+    params.append('page_size', pageSize.toString())
     const res = await fetch(`${API_BASE_URL}/tasks?${params.toString()}`)
     if (!res.ok) throw new Error('Failed to fetch tasks')
     return res.json()
@@ -122,8 +133,14 @@ export const api = {
     return res.json()
   },
 
-  getFlows: async (): Promise<Flow[]> => {
-    const res = await fetch(`${API_BASE_URL}/flows`)
+  getFlows: async (
+    page: number = 1,
+    pageSize: number = 10
+  ): Promise<PaginatedResponse<Flow>> => {
+    const params = new URLSearchParams()
+    params.append('page', page.toString())
+    params.append('page_size', pageSize.toString())
+    const res = await fetch(`${API_BASE_URL}/flows?${params.toString()}`)
     if (!res.ok) throw new Error('Failed to fetch flows')
     return res.json()
   },

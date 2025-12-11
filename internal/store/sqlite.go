@@ -147,10 +147,20 @@ func (s *SQLite) CreateFlowVersion(flowID string, version int, definitionJSON st
 	return id, nil
 }
 
-func (s *SQLite) ListFlows() ([]Flow, error) {
-	rows, err := s.DB.Query("SELECT id, name, description, created_at FROM flows ORDER BY created_at DESC")
+func (s *SQLite) ListFlows(limit, offset int) ([]Flow, int64, error) {
+	var count int64
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM flows").Scan(&count); err != nil {
+		return nil, 0, err
+	}
+
+	q := "SELECT id, name, description, created_at FROM flows ORDER BY created_at DESC"
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
+	}
+
+	rows, err := s.DB.Query(q)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	var flows []Flow
@@ -159,12 +169,12 @@ func (s *SQLite) ListFlows() ([]Flow, error) {
 		// Handle potential NULL description
 		var desc sql.NullString
 		if err := rows.Scan(&f.ID, &f.Name, &desc, &f.CreatedAt); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		f.Description = desc.String
 		flows = append(flows, f)
 	}
-	return flows, nil
+	return flows, count, nil
 }
 
 func (s *SQLite) ListFlowVersions(flowID string) ([]FlowVersion, error) {
@@ -324,7 +334,23 @@ func (s *SQLite) UpdateTaskProgressOwned(id string, owner string, currentNode st
 	return err
 }
 
-func (s *SQLite) ListTasks(status string, flowVersionID string, limit int) ([]Task, error) {
+func (s *SQLite) ListTasks(status string, flowVersionID string, limit, offset int) ([]Task, int64, error) {
+	// Count query
+	countQ := `SELECT COUNT(*) FROM tasks t WHERE 1=1`
+	countArgs := []interface{}{}
+	if status != "" {
+		countQ += " AND t.status=?"
+		countArgs = append(countArgs, status)
+	}
+	if flowVersionID != "" {
+		countQ += " AND t.flow_version_id=?"
+		countArgs = append(countArgs, flowVersionID)
+	}
+	var count int64
+	if err := s.DB.QueryRow(countQ, countArgs...).Scan(&count); err != nil {
+		return nil, 0, err
+	}
+
 	q := `SELECT 
 		t.id, t.flow_version_id, t.status, t.params_json, t.shared_json, t.current_node_key, t.last_action, t.step_count, t.retry_state_json, t.lease_owner, t.lease_expiry, t.request_id, t.created_at, t.updated_at,
 		COALESCE(f.id, ''), COALESCE(f.name, ''), COALESCE(fv.version, 0)
@@ -342,25 +368,24 @@ func (s *SQLite) ListTasks(status string, flowVersionID string, limit int) ([]Ta
 		args = append(args, flowVersionID)
 	}
 	q += " ORDER BY t.updated_at DESC"
-	if limit <= 0 {
-		limit = 100
+	if limit > 0 {
+		q += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
 	}
-	q += " LIMIT ?"
-	args = append(args, limit)
 	rows, err := s.DB.Query(q, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	out := []Task{}
 	for rows.Next() {
 		var t Task
 		if err := rows.Scan(&t.ID, &t.FlowVersionID, &t.Status, &t.ParamsJSON, &t.SharedJSON, &t.CurrentNodeKey, &t.LastAction, &t.StepCount, &t.RetryStateJSON, &t.LeaseOwner, &t.LeaseExpiry, &t.RequestID, &t.CreatedAt, &t.UpdatedAt, &t.FlowID, &t.FlowName, &t.FlowVersion); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, t)
 	}
-	return out, nil
+	return out, count, nil
 }
 
 type NodeRun struct {

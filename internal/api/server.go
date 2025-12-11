@@ -109,6 +109,13 @@ func (s *Server) handleAllocate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, best, 200)
 }
 
+type PaginatedResponse struct {
+	Data  interface{} `json:"data"`
+	Total int64       `json:"total"`
+	Page  int         `json:"page"`
+	Size  int         `json:"size"`
+}
+
 func (s *Server) handleFlows(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		var payload struct {
@@ -125,12 +132,29 @@ func (s *Server) handleFlows(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"id": id}, 200)
 		return
 	} else if r.Method == http.MethodGet {
-		flows, err := s.Store.ListFlows()
+		pageS := r.URL.Query().Get("page")
+		pageSizeS := r.URL.Query().Get("page_size")
+		page, _ := strconv.Atoi(pageS)
+		if page < 1 {
+			page = 1
+		}
+		pageSize, _ := strconv.Atoi(pageSizeS)
+		if pageSize < 1 {
+			pageSize = 10
+		}
+		offset := (page - 1) * pageSize
+
+		flows, total, err := s.Store.ListFlows(pageSize, offset)
 		if err != nil {
 			writeJSON(w, map[string]string{"error": err.Error()}, 500)
 			return
 		}
-		writeJSON(w, flows, 200)
+		writeJSON(w, PaginatedResponse{
+			Data:  flows,
+			Total: total,
+			Page:  page,
+			Size:  pageSize,
+		}, 200)
 		return
 	}
 	writeJSON(w, map[string]string{"error": "method"}, 405)
@@ -224,12 +248,29 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 	} else if r.Method == http.MethodGet {
 		status := r.URL.Query().Get("status")
 		flowVersionID := r.URL.Query().Get("flow_version_id")
-		tasks, err := s.Store.ListTasks(status, flowVersionID, 100)
+		pageS := r.URL.Query().Get("page")
+		pageSizeS := r.URL.Query().Get("page_size")
+		page, _ := strconv.Atoi(pageS)
+		if page < 1 {
+			page = 1
+		}
+		pageSize, _ := strconv.Atoi(pageSizeS)
+		if pageSize < 1 {
+			pageSize = 10
+		}
+		offset := (page - 1) * pageSize
+
+		tasks, total, err := s.Store.ListTasks(status, flowVersionID, pageSize, offset)
 		if err != nil {
 			writeJSON(w, map[string]string{"error": err.Error()}, 500)
 			return
 		}
-		writeJSON(w, tasks, 200)
+		writeJSON(w, PaginatedResponse{
+			Data:  tasks,
+			Total: total,
+			Page:  page,
+			Size:  pageSize,
+		}, 200)
 		return
 	}
 	writeJSON(w, map[string]string{"error": "method"}, 405)

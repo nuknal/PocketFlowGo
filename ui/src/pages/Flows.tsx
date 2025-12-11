@@ -30,9 +30,20 @@ import { Plus, Play } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, type Flow } from '@/lib/api'
 import { RunTaskDialog } from '@/components/RunTaskDialog'
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination'
 
 export default function Flows() {
   const [flows, setFlows] = useState<Flow[]>([])
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(10)
+  const [total, setTotal] = useState(0)
   const [newFlowName, setNewFlowName] = useState('')
   const [newFlowDesc, setNewFlowDesc] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -44,8 +55,9 @@ export default function Flows() {
 
   const fetchFlows = async () => {
     try {
-      const data = await api.getFlows()
-      setFlows(data || [])
+      const data = await api.getFlows(page, pageSize)
+      setFlows(data.data || [])
+      setTotal(data.total || 0)
     } catch (error) {
       console.error('Failed to fetch flows:', error)
     }
@@ -53,7 +65,7 @@ export default function Flows() {
 
   useEffect(() => {
     fetchFlows()
-  }, [])
+  }, [page, pageSize])
 
   const handleCreateFlow = async () => {
     if (!newFlowName.trim()) return
@@ -200,6 +212,64 @@ export default function Flows() {
               )}
             </TableBody>
           </Table>
+          <Pagination className="justify-end py-4">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => page > 1 && setPage(page - 1)}
+                  className={
+                    page <= 1
+                      ? 'pointer-events-none opacity-50'
+                      : 'cursor-pointer'
+                  }
+                />
+              </PaginationItem>
+              {Array.from(
+                { length: Math.ceil(total / pageSize) },
+                (_, i) => i + 1
+              )
+                .filter(
+                  (p) =>
+                    p === 1 ||
+                    p === Math.ceil(total / pageSize) ||
+                    (p >= page - 1 && p <= page + 1)
+                )
+                .map((p, i, arr) => {
+                  if (i > 0 && arr[i] - arr[i - 1] > 1) {
+                    return (
+                      <PaginationItem key={`ellipsis-${i}`}>
+                        <span className="flex h-9 w-9 items-center justify-center text-muted-foreground">
+                          ...
+                        </span>
+                      </PaginationItem>
+                    )
+                  }
+                  return (
+                    <PaginationItem key={p}>
+                      <PaginationLink
+                        onClick={() => setPage(p)}
+                        isActive={page === p}
+                        className="cursor-pointer"
+                      >
+                        {p}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                })}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() =>
+                    page < Math.ceil(total / pageSize) && setPage(page + 1)
+                  }
+                  className={
+                    page >= Math.ceil(total / pageSize)
+                      ? 'pointer-events-none opacity-50'
+                      : 'cursor-pointer'
+                  }
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </CardContent>
       </Card>
 
