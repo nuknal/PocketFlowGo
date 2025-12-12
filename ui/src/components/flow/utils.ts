@@ -83,7 +83,10 @@ export const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   return { nodes: newNodes, edges }
 }
 
-export const expandFlowDefinition = async (definitionJson: string) => {
+export const expandFlowDefinition = async (
+  definitionJson: string,
+  isDark: boolean = false
+) => {
   let def: any = {}
   try {
     def = JSON.parse(definitionJson)
@@ -93,9 +96,12 @@ export const expandFlowDefinition = async (definitionJson: string) => {
 
   const commonEdgeStyle = {
     type: 'smoothstep',
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#333' },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color: isDark ? '#94a3b8' : '#333',
+    }, // slate-400 : gray-800
     animated: false,
-    style: { stroke: '#333', strokeWidth: 2 },
+    style: { stroke: isDark ? '#94a3b8' : '#333', strokeWidth: 2 },
   }
 
   const processDefinition = async (

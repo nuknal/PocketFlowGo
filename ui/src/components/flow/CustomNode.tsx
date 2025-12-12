@@ -102,7 +102,7 @@ export default function CustomNode({ data }: NodeProps) {
                 {rest.parallel_services.map((s: string, i: number) => (
                   <span
                     key={i}
-                    className="bg-blue-50 text-blue-700 px-1 rounded text-[10px]"
+                    className="bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200 px-1 rounded text-[10px]"
                   >
                     {s}
                   </span>
@@ -114,7 +114,7 @@ export default function CustomNode({ data }: NodeProps) {
                 {rest.parallel_execs.map((e: any, i: number) => (
                   <div
                     key={i}
-                    className="bg-slate-50 p-1 rounded border border-slate-100 text-[10px]"
+                    className="bg-slate-50 dark:bg-slate-800 p-1 rounded border border-slate-100 dark:border-slate-700 text-[10px]"
                   >
                     <div className="font-medium">
                       {e.service ||
@@ -148,7 +148,7 @@ export default function CustomNode({ data }: NodeProps) {
                 {rest.foreach_execs.map((e: any, i: number) => (
                   <div
                     key={i}
-                    className="bg-slate-50 p-1 rounded border border-slate-100 text-[10px]"
+                    className="bg-slate-50 dark:bg-slate-800 p-1 rounded border border-slate-100 dark:border-slate-700 text-[10px]"
                   >
                     <div className="font-mono text-[9px]">Index {e.index}</div>
                     {e.params && (
@@ -168,7 +168,7 @@ export default function CustomNode({ data }: NodeProps) {
           <div className="mt-1">
             <span className="text-muted-foreground text-[10px]">Flow ID:</span>
             <div
-              className="font-mono bg-slate-100 p-1 rounded truncate"
+              className="font-mono bg-slate-100 dark:bg-slate-800 p-1 rounded truncate"
               title={rest.flow_id}
             >
               {rest.flow_id}
@@ -181,7 +181,7 @@ export default function CustomNode({ data }: NodeProps) {
           <div className="mt-1">
             <span className="text-muted-foreground text-[10px]">Wait For:</span>
             <div
-              className="font-mono bg-yellow-50 p-1 rounded truncate text-yellow-800"
+              className="font-mono bg-yellow-50 dark:bg-yellow-900/30 p-1 rounded truncate text-yellow-800 dark:text-yellow-200"
               title={rest.params.signal_key}
             >
               {rest.params.signal_key}
@@ -193,7 +193,7 @@ export default function CustomNode({ data }: NodeProps) {
       <Handle
         type="source"
         position={Position.Right}
-        className="w-3 h-3 bg-slate-400"
+        className="w-3 h-3 bg-slate-400 dark:bg-slate-500"
       />
     </Card>
   )

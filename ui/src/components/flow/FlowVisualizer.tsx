@@ -41,14 +41,20 @@ export default function FlowVisualizer({
         setEdges([])
         return
       }
+      const isDark =
+        theme === 'dark' ||
+        (theme === 'system' &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches)
+
       const { nodes: newNodes, edges: newEdges } = await expandFlowDefinition(
-        definitionJson
+        definitionJson,
+        isDark
       )
       setNodes(newNodes)
       setEdges(newEdges)
     }
     loadFlow()
-  }, [definitionJson, setNodes, setEdges])
+  }, [definitionJson, setNodes, setEdges, theme])
 
   return (
     <div className="w-full border rounded-lg bg-background" style={{ height }}>
