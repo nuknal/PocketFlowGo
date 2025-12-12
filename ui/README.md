@@ -1,73 +1,84 @@
-# React + TypeScript + Vite
+# PocketFlowGo UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The web interface for PocketFlowGo, built with React, Vite, and TypeScript. This UI provides a visual dashboard to manage flows, tasks, and workers, including a powerful flow visualizer.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Framework:** [React 19](https://react.dev/)
+- **Build Tool:** [Vite](https://vitejs.dev/)
+- **Language:** [TypeScript](https://www.typescriptlang.org/)
+- **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+- **UI Components:** [shadcn/ui](https://ui.shadcn.com/) (based on Radix UI)
+- **Flow Visualization:** [React Flow](https://reactflow.dev/) (@xyflow/react)
+- **Icons:** [Lucide React](https://lucide.dev/)
+- **Routing:** [React Router](https://reactrouter.com/)
 
-## React Compiler
+## Project Structure
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+ui/
+├── src/
+│   ├── assets/         # Static assets
+│   ├── components/     # Reusable components
+│   │   ├── flow/       # Custom React Flow nodes and visualizer
+│   │   ├── layout/     # App layout (Sidebar, etc.)
+│   │   └── ui/         # Base UI components (shadcn/ui)
+│   ├── lib/            # Utilities and API client
+│   ├── pages/          # Application pages
+│   └── App.tsx         # Main application entry
+├── embed.go            # Go embed directive for bundling UI
+└── package.json        # Dependencies and scripts
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Getting Started
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Prerequisites
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- Node.js (v18 or later recommended)
+- npm or yarn or pnpm
+
+### Installation
+
+1. Navigate to the `ui` directory:
+   ```bash
+   cd ui
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+### Development
+
+Start the development server:
+
+```bash
+npm run dev
 ```
+
+The application will be available at `http://localhost:5173` (or the port shown in the terminal).
+
+> **Note:** Ensure the PocketFlowGo backend server is running to fetch real data. You may need to configure the API endpoint in `src/lib/api.ts` if it differs from the default.
+
+### Build
+
+Build the application for production:
+
+```bash
+npm run build
+```
+
+This will generate a `dist` folder with the compiled assets.
+
+### Embedding in Go
+
+This project is designed to be embedded into the PocketFlowGo Go binary. The `embed.go` file facilitates this integration. After building the UI, the Go build process will include the contents of the `dist` directory.
+
+## Features
+
+- **Dashboard:** Overview of system status.
+- **Flow Management:** Visualize, create, and manage workflows.
+- **Task Tracking:** Monitor task execution and history.
+- **Worker Management:** View connected workers and their status.
+- **Dark Mode:** Built-in theme switching support.
