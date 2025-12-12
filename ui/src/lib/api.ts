@@ -76,7 +76,7 @@ export const api = {
     if (service) params.append('service', service)
     if (ttl) params.append('ttl', ttl.toString())
     const res = await fetch(
-      `${API_BASE_URL}/api/api/workers/list?${params.toString()}`
+      `${API_BASE_URL}/api/workers/list?${params.toString()}`
     )
     if (!res.ok) throw new Error('Failed to fetch workers')
     return res.json()

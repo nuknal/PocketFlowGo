@@ -38,6 +38,7 @@ export function Sidebar() {
     <div className="flex h-full w-64 flex-col border-r bg-card text-card-foreground">
       <div className="flex h-14 items-center border-b px-4">
         <Link to="/" className="flex items-center gap-2 font-semibold">
+          <img src="/logo.svg" alt="PocketFlowGo" className="h-6 w-6" />
           <span className="text-xl">PocketFlowGo</span>
         </Link>
       </div>

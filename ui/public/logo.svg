@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="200" height="200" rx="50" fill="url(#grad)" />
+  
+  <!-- Flow lines -->
+  <path d="M50 100 L80 100 L110 60 L160 60" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <path d="M80 100 L110 140 L160 140" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  
+  <!-- Nodes -->
+  <circle cx="50" cy="100" r="14" fill="white" />
+  <circle cx="160" cy="60" r="14" fill="white" />
+  <circle cx="160" cy="140" r="14" fill="white" />
+</svg>
