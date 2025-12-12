@@ -25,12 +25,13 @@ func (e *Engine) execLocalFunc(node DefNode, input interface{}, params map[strin
 			if node.AttemptDelayMillis > 0 {
 				time.Sleep(time.Duration(node.AttemptDelayMillis) * time.Millisecond)
 			}
-			if node.MaxAttempts > 0 && attempts >= node.MaxAttempts {
+			if node.MaxAttempts == 0 || (node.MaxAttempts > 0 && attempts >= node.MaxAttempts) {
 				break
 			}
+
 			continue
 		}
 		return res, "local-func:" + node.Func, "local", nil
 	}
-	return nil, "", "", errorString("failed")
+	return nil, "local-func:" + node.Func, "local", errorString("failed")
 }

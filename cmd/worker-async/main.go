@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	f "github.com/nuknal/PocketFlowGo/internal/flow"
 )
 
 // QueueTask represents the task received from the queue
@@ -44,6 +46,34 @@ func main() {
 
 	svcList := strings.Split(*services, ",")
 	log.Printf("Starting Async Worker %s polling %s for services: %v", *workerID, *schedulerURL, svcList)
+
+	// Register and Heartbeat
+	regClient := &f.RegistryClient{BaseURL: *schedulerURL + "/api"}
+	go func() {
+		// Registration loop
+		for {
+			err := regClient.Register(f.WorkerInfo{
+				ID:       *workerID,
+				URL:      "queue",
+				Services: svcList,
+				Type:     "async",
+			})
+			if err != nil {
+				log.Printf("Registration failed: %v", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			log.Printf("Registered as async worker")
+			break
+		}
+		// Heartbeat loop
+		for {
+			time.Sleep(5 * time.Second)
+			if err := regClient.Heartbeat(*workerID, "queue", 0); err != nil {
+				log.Printf("Heartbeat error: %v", err)
+			}
+		}
+	}()
 
 	client := &http.Client{Timeout: 30 * time.Second}
 

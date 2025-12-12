@@ -8,6 +8,7 @@ PocketFlowGo is a lightweight, centralized task orchestration service written in
 - Remote workers over HTTP with registration, heartbeat, and load-aware allocation
 - Durable state in SQLite: task cursor, shared state, retries, leases, and full node run logs
 - Crash-safe scheduling loop that resumes leased tasks
+- Async Queue (Pull Mode) for workers behind firewalls or long-running tasks
 
 ## Quick Start
 
@@ -65,8 +66,18 @@ Minimal example:
 
 Key fields:
 - `start`: node key to begin execution
-- `nodes`: map of node definitions with `kind`, `service`, `prep` (input selection), `params` (override/merge), and `post` (write output, select action)
+- `nodes`: map of node definitions with `kind`, `service`, `exec_type` (default `http`, optional `queue`), `prep`, `params`, and `post`
 - `edges`: array of `{from, action, to}`; `action="default"` is the fallback
+
+## Async Queue Mode (Pull)
+
+For workers that cannot be reached directly via HTTP (e.g., behind firewalls) or for long-running tasks, use `exec_type: "queue"`.
+
+1. **Define Node**: Set `"exec_type": "queue"` in the node definition.
+2. **Enqueue**: The engine suspends the task and writes a job to the queue table.
+3. **Poll**: Workers call `POST /queue/poll` to fetch pending jobs.
+4. **Complete**: Workers process the job and call `POST /queue/complete` with the result.
+5. **Resume**: The engine resumes the flow execution with the reported result.
 
 ## HTTP API
 
@@ -87,6 +98,10 @@ Tasks:
 - `POST /tasks/cancel?id=...` → mark as `canceling`
 - `GET /tasks/runs?task_id=...` → node run log
 - `POST /tasks/signal` → write a key/value into task shared state (for `wait_event/approval`)
+
+Queue (Pull Mode):
+- `POST /queue/poll` → worker polls for pending tasks
+- `POST /queue/complete` → worker reports task completion with result
 
 ## Components & Layout
 - `cmd/scheduler`: HTTP API + scheduling loop

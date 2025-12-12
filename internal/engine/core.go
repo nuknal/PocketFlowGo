@@ -113,11 +113,17 @@ func (e *Engine) suspendTask(t store.Task, status string, shared map[string]inte
 }
 
 func (e *Engine) recordRun(t store.Task, curr string, attempt int, status string, prep map[string]interface{}, input interface{}, output interface{}, errText string, action string, workerID string, workerURL string) {
+	e.recordRunDetailed(t, curr, attempt, status, "", "", prep, input, output, errText, action, workerID, workerURL)
+}
+
+func (e *Engine) recordRunDetailed(t store.Task, curr string, attempt int, status string, subStatus string, branchID string, prep map[string]interface{}, input interface{}, output interface{}, errText string, action string, workerID string, workerURL string) {
 	nr := map[string]interface{}{
 		"task_id":          t.ID,
 		"node_key":         curr,
 		"attempt_no":       attempt,
 		"status":           status,
+		"sub_status":       subStatus,
+		"branch_id":        branchID,
 		"prep_json":        toJSON(prep),
 		"exec_input_json":  toJSON(input),
 		"exec_output_json": toJSON(output),

@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -14,48 +14,49 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { api, type Worker } from "@/lib/api";
+} from '@/components/ui/table'
+import { api, type Worker } from '@/lib/api'
 
 export default function Workers() {
-  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([])
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const workersData = await api.getWorkers();
-        setWorkers(workersData || []);
+        const workersData = await api.getWorkers()
+        setWorkers(workersData || [])
       } catch (error) {
-        console.error("Failed to fetch workers:", error);
+        console.error('Failed to fetch workers:', error)
       }
-    };
+    }
 
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    fetchData()
+    const interval = setInterval(fetchData, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Workers</h1>
-          <p className="text-muted-foreground">Monitor registered worker nodes</p>
+          <p className="text-muted-foreground">
+            Monitor registered worker nodes
+          </p>
         </div>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Worker Nodes</CardTitle>
-          <CardDescription>
-            Live status of connected workers.
-          </CardDescription>
+          <CardDescription>Live status of connected workers.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Worker ID</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>URL</TableHead>
                 <TableHead>Services</TableHead>
                 <TableHead>Current Load</TableHead>
@@ -67,7 +68,12 @@ export default function Workers() {
               {workers.map((worker) => (
                 <TableRow key={worker.id}>
                   <TableCell className="font-medium">{worker.id}</TableCell>
-                  <TableCell className="font-mono text-xs">{worker.url}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{worker.type || 'http'}</Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {worker.url}
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1 flex-wrap">
                       {worker.services?.map((s) => (
@@ -78,9 +84,15 @@ export default function Workers() {
                     </div>
                   </TableCell>
                   <TableCell>{worker.load}</TableCell>
-                  <TableCell>{new Date(worker.last_heartbeat * 1000).toLocaleString()}</TableCell>
                   <TableCell>
-                    <Badge variant={worker.status === "online" ? "default" : "secondary"}>
+                    {new Date(worker.last_heartbeat * 1000).toLocaleString()}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        worker.status === 'online' ? 'default' : 'secondary'
+                      }
+                    >
                       {worker.status}
                     </Badge>
                   </TableCell>
@@ -88,7 +100,10 @@ export default function Workers() {
               ))}
               {workers.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                  <TableCell
+                    colSpan={7}
+                    className="text-center h-24 text-muted-foreground"
+                  >
                     No active workers found.
                   </TableCell>
                 </TableRow>
@@ -98,5 +113,5 @@ export default function Workers() {
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

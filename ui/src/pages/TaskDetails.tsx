@@ -119,7 +119,9 @@ export default function TaskDetails() {
                   </>
                 ) : (
                   <Link
-                    to={`/flows/${task.flow_id || task.flow_version_id.split('-')[0]}?version=${task.flow_version_id}`}
+                    to={`/flows/${
+                      task.flow_id || task.flow_version_id.split('-')[0]
+                    }?version=${task.flow_version_id}`}
                     className="hover:underline hover:text-blue-600"
                   >
                     {task.flow_version_id}
@@ -185,6 +187,7 @@ export default function TaskDetails() {
             <TableHeader>
               <TableRow>
                 <TableHead>Node Key</TableHead>
+                <TableHead>Branch/SubStatus</TableHead>
                 <TableHead>Attempt</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Worker</TableHead>
@@ -197,6 +200,19 @@ export default function TaskDetails() {
               {runs.map((run) => (
                 <TableRow key={run.id}>
                   <TableCell className="font-medium">{run.node_key}</TableCell>
+                  <TableCell className="text-xs font-mono">
+                    {run.branch_id && (
+                      <Badge variant="outline" className="mr-1">
+                        {run.branch_id}
+                      </Badge>
+                    )}
+                    {run.sub_status && (
+                      <span className="text-muted-foreground">
+                        {run.sub_status}
+                      </span>
+                    )}
+                    {!run.branch_id && !run.sub_status && '-'}
+                  </TableCell>
                   <TableCell>{run.attempt_no}</TableCell>
                   <TableCell>
                     <Badge
@@ -230,7 +246,7 @@ export default function TaskDetails() {
               {runs.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center h-24 text-muted-foreground"
                   >
                     No execution history found.

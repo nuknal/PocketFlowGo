@@ -13,6 +13,7 @@ type WorkerInfo struct {
 	Services      []string `json:"services"`
 	Load          int      `json:"load"`
 	LastHeartbeat int64    `json:"lastHeartbeat"`
+	Type          string   `json:"type"`
 }
 
 type RegistryClient struct {

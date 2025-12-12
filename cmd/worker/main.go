@@ -161,7 +161,7 @@ func main() {
 	u.Host = host + ":" + strconv.Itoa(port)
 	selfURL = u.String()
 	for {
-		if err := client.Register(f.WorkerInfo{ID: id, URL: selfURL, Services: keys(services)}); err != nil {
+		if err := client.Register(f.WorkerInfo{ID: id, URL: selfURL, Services: keys(services), Type: "http"}); err != nil {
 			log.Printf("register error: %v", err)
 			time.Sleep(2 * time.Second)
 			continue

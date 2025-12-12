@@ -184,10 +184,11 @@ func (s *Server) handleRegisterWorker(w http.ResponseWriter, r *http.Request) {
 		ID       string
 		URL      string
 		Services []string
+		Type     string
 	}
 	dec := json.NewDecoder(r.Body)
 	_ = dec.Decode(&payload)
-	_ = s.Store.RegisterWorker(store.WorkerInfo{ID: payload.ID, URL: payload.URL, Services: payload.Services, Load: 0, LastHeartbeat: time.Now().Unix(), Status: "online"})
+	_ = s.Store.RegisterWorker(store.WorkerInfo{ID: payload.ID, URL: payload.URL, Services: payload.Services, Load: 0, LastHeartbeat: time.Now().Unix(), Status: "online", Type: payload.Type})
 	writeJSON(w, map[string]string{"ok": "1"}, 200)
 }
 

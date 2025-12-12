@@ -7,6 +7,8 @@ import (
     "net/http"
     "sort"
     "time"
+
+    "github.com/nuknal/PocketFlowGo/internal/store"
 )
 
 // execHTTP executes an HTTP request to a worker service.
@@ -14,6 +16,16 @@ import (
 func (e *Engine) execHTTP(node DefNode, input interface{}, params map[string]interface{}) (interface{}, string, string, error) {
     // 1. Discover available workers
     lst, _ := e.Store.ListWorkers(node.Service, 15)
+    
+    // Filter for HTTP workers only
+    var httpWorkers []store.WorkerInfo
+    for _, w := range lst {
+        if w.Type == "http" || w.Type == "" {
+            httpWorkers = append(httpWorkers, w)
+        }
+    }
+    lst = httpWorkers
+
     if len(lst) == 0 {
         return nil, "", "", errorString("no worker")
     }

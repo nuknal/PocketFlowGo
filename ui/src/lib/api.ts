@@ -9,6 +9,7 @@ export interface Worker {
   load: number
   last_heartbeat: number
   status: string
+  type: string
 }
 
 export interface Task {
@@ -44,6 +45,8 @@ export interface NodeRun {
   node_key: string
   attempt_no: number
   status: string
+  sub_status?: string
+  branch_id?: string
   prep_json: string
   exec_input_json: string
   exec_output_json: string

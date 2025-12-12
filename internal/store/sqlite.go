@@ -36,8 +36,8 @@ func (s *SQLite) Init() error {
 		"CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, flow_version_id TEXT, node_key TEXT, service TEXT, kind TEXT, config_json TEXT);",
 		"CREATE TABLE IF NOT EXISTS edges (id TEXT PRIMARY KEY, flow_version_id TEXT, from_node_key TEXT, action TEXT, to_node_key TEXT);",
 		"CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, flow_version_id TEXT, status TEXT, params_json TEXT, shared_json TEXT, current_node_key TEXT, last_action TEXT, step_count INTEGER, retry_state_json TEXT, lease_owner TEXT, lease_expiry INTEGER, request_id TEXT, created_at INTEGER, updated_at INTEGER);",
-		"CREATE TABLE IF NOT EXISTS node_runs (id TEXT PRIMARY KEY, task_id TEXT, node_key TEXT, attempt_no INTEGER, status TEXT, prep_json TEXT, exec_input_json TEXT, exec_output_json TEXT, error_text TEXT, action TEXT, started_at INTEGER, finished_at INTEGER, worker_id TEXT, worker_url TEXT);",
-		"CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, url TEXT, services_json TEXT, load INTEGER, last_heartbeat INTEGER, status TEXT);",
+		"CREATE TABLE IF NOT EXISTS node_runs (id TEXT PRIMARY KEY, task_id TEXT, node_key TEXT, attempt_no INTEGER, status TEXT, sub_status TEXT, branch_id TEXT, prep_json TEXT, exec_input_json TEXT, exec_output_json TEXT, error_text TEXT, action TEXT, started_at INTEGER, finished_at INTEGER, worker_id TEXT, worker_url TEXT);",
+		"CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, url TEXT, services_json TEXT, load INTEGER, last_heartbeat INTEGER, status TEXT, type TEXT);",
 		"CREATE TABLE IF NOT EXISTS task_queue (id TEXT PRIMARY KEY, task_id TEXT, node_key TEXT, service TEXT, input_json TEXT, status TEXT, worker_id TEXT, created_at INTEGER, started_at INTEGER, timeout_at INTEGER);",
 		"CREATE INDEX IF NOT EXISTS idx_queue_service_status ON task_queue(service, status);",
 	}
@@ -48,6 +48,11 @@ func (s *SQLite) Init() error {
 	}
 	// Try to add description column if it doesn't exist (simplistic migration)
 	_, _ = s.DB.Exec("ALTER TABLE flows ADD COLUMN description TEXT")
+	// Add type column to workers if it doesn't exist
+	_, _ = s.DB.Exec("ALTER TABLE workers ADD COLUMN type TEXT")
+	// Add sub_status and branch_id to node_runs
+	_, _ = s.DB.Exec("ALTER TABLE node_runs ADD COLUMN sub_status TEXT")
+	_, _ = s.DB.Exec("ALTER TABLE node_runs ADD COLUMN branch_id TEXT")
 	return nil
 }
 
@@ -63,12 +68,17 @@ type WorkerInfo struct {
 	Load          int      `json:"load"`
 	LastHeartbeat int64    `json:"last_heartbeat"`
 	Status        string   `json:"status"`
+	Type          string   `json:"type"` // http, async, local
 }
 
 // RegisterWorker registers or updates a worker in the database.
 func (s *SQLite) RegisterWorker(w WorkerInfo) error {
 	b, _ := json.Marshal(w.Services)
-	_, err := s.DB.Exec("INSERT INTO workers(id,url,services_json,load,last_heartbeat,status) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET url=excluded.url, services_json=excluded.services_json, load=excluded.load, last_heartbeat=excluded.last_heartbeat, status=excluded.status", w.ID, w.URL, string(b), w.Load, nowUnix(), w.Status)
+	// Default to http if type is missing
+	if w.Type == "" {
+		w.Type = "http"
+	}
+	_, err := s.DB.Exec("INSERT INTO workers(id,url,services_json,load,last_heartbeat,status,type) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET url=excluded.url, services_json=excluded.services_json, load=excluded.load, last_heartbeat=excluded.last_heartbeat, status=excluded.status, type=excluded.type", w.ID, w.URL, string(b), w.Load, nowUnix(), w.Status, w.Type)
 	return err
 }
 
@@ -87,7 +97,7 @@ func (s *SQLite) RefreshWorkersStatus(ttl int64) error {
 }
 
 func (s *SQLite) ListWorkers(service string, ttl int64) ([]WorkerInfo, error) {
-	rows, err := s.DB.Query("SELECT id,url,services_json,load,last_heartbeat,status FROM workers")
+	rows, err := s.DB.Query("SELECT id,url,services_json,load,last_heartbeat,status,type FROM workers")
 	if err != nil {
 		return nil, err
 	}
@@ -96,9 +106,10 @@ func (s *SQLite) ListWorkers(service string, ttl int64) ([]WorkerInfo, error) {
 	now := nowUnix()
 	for rows.Next() {
 		var id, url, sj, status string
+		var typeStr sql.NullString
 		var load int
 		var hb int64
-		if err := rows.Scan(&id, &url, &sj, &load, &hb, &status); err != nil {
+		if err := rows.Scan(&id, &url, &sj, &load, &hb, &status, &typeStr); err != nil {
 			return nil, err
 		}
 		if ttl > 0 && now-hb > ttl {
@@ -118,7 +129,7 @@ func (s *SQLite) ListWorkers(service string, ttl int64) ([]WorkerInfo, error) {
 				continue
 			}
 		}
-		out = append(out, WorkerInfo{ID: id, URL: url, Services: arr, Load: load, LastHeartbeat: hb, Status: status})
+		out = append(out, WorkerInfo{ID: id, URL: url, Services: arr, Load: load, LastHeartbeat: hb, Status: status, Type: typeStr.String})
 	}
 	return out, nil
 }
@@ -321,10 +332,14 @@ func (s *SQLite) UpdateTaskStatusOwned(id string, owner string, status string) e
 func (s *SQLite) SaveNodeRun(nr map[string]interface{}) error {
 	id := genID("run")
 	nr["id"] = id
-	cols := []string{"id", "task_id", "node_key", "attempt_no", "status", "prep_json", "exec_input_json", "exec_output_json", "error_text", "action", "started_at", "finished_at", "worker_id", "worker_url"}
+	cols := []string{"id", "task_id", "node_key", "attempt_no", "status", "sub_status", "branch_id", "prep_json", "exec_input_json", "exec_output_json", "error_text", "action", "started_at", "finished_at", "worker_id", "worker_url"}
 	vals := make([]interface{}, 0, len(cols))
 	for _, c := range cols {
-		vals = append(vals, nr[c])
+		if val, ok := nr[c]; ok {
+			vals = append(vals, val)
+		} else {
+			vals = append(vals, nil)
+		}
 	}
 	ph := strings.Repeat("?,", len(cols))
 	ph = ph[:len(ph)-1]
@@ -402,6 +417,8 @@ type NodeRun struct {
 	NodeKey        string `json:"node_key"`
 	AttemptNo      int    `json:"attempt_no"`
 	Status         string `json:"status"`
+	SubStatus      string `json:"sub_status"`
+	BranchID       string `json:"branch_id"`
 	PrepJSON       string `json:"prep_json"`
 	ExecInputJSON  string `json:"exec_input_json"`
 	ExecOutputJSON string `json:"exec_output_json"`
@@ -414,7 +431,7 @@ type NodeRun struct {
 }
 
 func (s *SQLite) ListNodeRuns(taskID string) ([]NodeRun, error) {
-	rows, err := s.DB.Query("SELECT id,task_id,node_key,attempt_no,status,prep_json,exec_input_json,exec_output_json,error_text,action,started_at,finished_at,worker_id,worker_url FROM node_runs WHERE task_id=? ORDER BY started_at ASC", taskID)
+	rows, err := s.DB.Query("SELECT id,task_id,node_key,attempt_no,status,sub_status,branch_id,prep_json,exec_input_json,exec_output_json,error_text,action,started_at,finished_at,worker_id,worker_url FROM node_runs WHERE task_id=? ORDER BY started_at ASC", taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -422,9 +439,12 @@ func (s *SQLite) ListNodeRuns(taskID string) ([]NodeRun, error) {
 	out := []NodeRun{}
 	for rows.Next() {
 		var r NodeRun
-		if err := rows.Scan(&r.ID, &r.TaskID, &r.NodeKey, &r.AttemptNo, &r.Status, &r.PrepJSON, &r.ExecInputJSON, &r.ExecOutputJSON, &r.ErrorText, &r.Action, &r.StartedAt, &r.FinishedAt, &r.WorkerID, &r.WorkerURL); err != nil {
+		var sub, branch sql.NullString
+		if err := rows.Scan(&r.ID, &r.TaskID, &r.NodeKey, &r.AttemptNo, &r.Status, &sub, &branch, &r.PrepJSON, &r.ExecInputJSON, &r.ExecOutputJSON, &r.ErrorText, &r.Action, &r.StartedAt, &r.FinishedAt, &r.WorkerID, &r.WorkerURL); err != nil {
 			return nil, err
 		}
+		r.SubStatus = sub.String
+		r.BranchID = branch.String
 		out = append(out, r)
 	}
 	return out, nil

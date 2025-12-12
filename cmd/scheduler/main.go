@@ -1,14 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/nuknal/PocketFlowGo/internal/api"
@@ -84,36 +82,33 @@ func main() {
 	}()
 	go func() {
 		eng := engine.New(s)
-		eng.RegisterFunc("mul", func(ctx context.Context, input interface{}, params map[string]interface{}) (interface{}, error) {
-			f := 0.0
-			if v, ok := input.(float64); ok {
-				f = v
-			}
-			m := 1.0
-			if mv, ok := params["mul"].(float64); ok {
-				m = mv
-			}
-			return f * m, nil
-		})
-		eng.RegisterFunc("upper", func(ctx context.Context, input interface{}, params map[string]interface{}) (interface{}, error) {
-			fmt.Printf("UPPER: %v\n", input)
-			if s, ok := input.(string); ok {
-				return strings.ToUpper(s), nil
-			}
-			if s, ok := params["text"].(string); ok {
-				return strings.ToUpper(s), nil
-			}
-			return nil, fmt.Errorf("expected string input")
-		})
-		eng.RegisterFunc("log_result", func(ctx context.Context, input interface{}, params map[string]interface{}) (interface{}, error) {
-			fmt.Printf("LOG RESULT: %v\n", input)
-			return input, nil
-		})
+		eng.RegisterFunc("mul", engine.MulFunc)
+		eng.RegisterFunc("upper", engine.UpperFunc)
+		eng.RegisterFunc("log_result", engine.LogResultFunc)
+
 		owner := os.Getenv("SCHEDULER_OWNER")
+
 		if owner == "" {
 			hn, _ := os.Hostname()
-			owner = fmt.Sprintf("scheduler-%s-%d-%d", hn, os.Getpid(), time.Now().UnixNano())
+			owner = fmt.Sprintf("scheduler-%s", hn)
 		}
+
+		// Register local worker
+		go func() {
+			for {
+				_ = s.RegisterWorker(store.WorkerInfo{
+					ID:            owner,
+					URL:           "local",
+					Services:      []string{"mul", "upper", "log_result"},
+					Load:          0,
+					LastHeartbeat: time.Now().Unix(),
+					Status:        "online",
+					Type:          "local",
+				})
+				time.Sleep(5 * time.Second)
+			}
+		}()
+
 		eng.Owner = owner
 		ttl := int64(3)
 		for {
