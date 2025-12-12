@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// toJSON marshals a value to a JSON string, ignoring errors.
 func toJSON(v interface{}) string { b, _ := json.Marshal(v); return string(b) }
 
 func ternary[T any](cond bool, a T, b T) T {
@@ -26,6 +27,7 @@ func errString(err error) string {
 	return err.Error()
 }
 
+// pickAction extracts an action string from a result map based on a key.
 func pickAction(res interface{}, key string) string {
 	if m, ok := res.(map[string]interface{}); ok {
 		if v, ok := m[key]; ok {
@@ -37,6 +39,7 @@ func pickAction(res interface{}, key string) string {
 	return ""
 }
 
+// findNext determines the next node key based on the current node and action.
 func findNext(edges []DefEdge, from string, action string) string {
 	a := action
 	if a == "" {
@@ -52,6 +55,7 @@ func findNext(edges []DefEdge, from string, action string) string {
 
 func indexKey(i int) string { return strconv.Itoa(i) }
 
+// getByPath retrieves a value from a nested map/slice structure using dot notation (e.g. "a.b[0].c").
 func getByPath(v interface{}, path string) interface{} {
 	if path == "" {
 		return v
@@ -88,6 +92,7 @@ func getByPath(v interface{}, path string) interface{} {
 	return cur
 }
 
+// parseSegment parses a path segment like "items[0]" into name="items", idx=0, hasIdx=true.
 func parseSegment(seg string) (string, int, bool) {
 	i := strings.Index(seg, "[")
 	if i < 0 {

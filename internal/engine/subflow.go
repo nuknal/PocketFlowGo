@@ -7,7 +7,10 @@ import (
 	"github.com/nuknal/PocketFlowGo/internal/store"
 )
 
+// runSubflow executes a nested flow definition.
+// It manages the subflow's state and progression independently of the main flow.
 func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
+	// Initialize runtime state for subflow
 	rt, _ := shared["_rt"].(map[string]interface{})
 	if rt == nil {
 		rt = map[string]interface{}{}
@@ -19,6 +22,8 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	}
 	currSub, _ := sf["curr"].(string)
 	subShared, _ := sf["shared"].(map[string]interface{})
+	
+	// Handle retry strategy delay
 	strat := node.FailureStrategy
 	if strat == "retry" {
 		now := time.Now().UnixMilli()
@@ -44,6 +49,8 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 			return nil
 		}
 	}
+
+	// Check if subflow execution is complete
 	if currSub == "" {
 		action := node.Post.ActionStatic
 		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, nil, nil, "", action, "", "")
@@ -69,6 +76,8 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 		e.logf("task=%s node=%s kind=subflow complete action=%s next=%s", t.ID, curr, action, next)
 		return nil
 	}
+	
+	// Prepare execution for the current node in subflow
 	e.logf("task=%s node=%s kind=subflow sub=%s", t.ID, curr, currSub)
 	sn := node.Subflow.Nodes[currSub]
 	childParams := map[string]interface{}{}
@@ -78,6 +87,8 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	for k, v := range sn.Params {
 		childParams[k] = v
 	}
+	
+	// Build input for sub-node
 	var subInput interface{}
 	if sn.Prep.InputMap != nil {
 		m := make(map[string]interface{})

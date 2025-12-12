@@ -1,3 +1,4 @@
+// Package api provides the HTTP API server for PocketFlowGo.
 package api
 
 import (
@@ -12,6 +13,7 @@ import (
 	"github.com/nuknal/PocketFlowGo/internal/store"
 )
 
+// Server serves the API endpoints.
 type Server struct{ Store *store.SQLite }
 
 func writeJSON(w http.ResponseWriter, v interface{}, code int) {
@@ -36,6 +38,7 @@ func withCORS(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// RegisterRoutes registers all API routes on the provided mux.
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/workers/register", withCORS(s.handleRegisterWorker))
 	mux.HandleFunc("/api/workers/heartbeat", withCORS(s.handleHeartbeat))

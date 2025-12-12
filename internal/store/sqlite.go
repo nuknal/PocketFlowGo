@@ -11,8 +11,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// SQLite implements the Store interface using a SQLite database.
 type SQLite struct{ DB *sql.DB }
 
+// OpenSQLite opens a connection to the SQLite database at the given path.
 func OpenSQLite(path string) (*SQLite, error) {
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
@@ -25,6 +27,7 @@ func OpenSQLite(path string) (*SQLite, error) {
 	return s, nil
 }
 
+// Init initializes the database schema.
 func (s *SQLite) Init() error {
 	stmts := []string{
 		"PRAGMA foreign_keys = ON;",
@@ -48,8 +51,9 @@ func (s *SQLite) Init() error {
 
 func nowUnix() int64 { return time.Now().Unix() }
 
-func genID(_ string) string { return uuid.New().String() }
+func genID(prefix string) string { return fmt.Sprintf("%s-%s", prefix, uuid.New().String()) }
 
+// WorkerInfo represents a registered worker node.
 type WorkerInfo struct {
 	ID            string   `json:"id"`
 	URL           string   `json:"url"`
@@ -59,6 +63,7 @@ type WorkerInfo struct {
 	Status        string   `json:"status"`
 }
 
+// RegisterWorker registers or updates a worker in the database.
 func (s *SQLite) RegisterWorker(w WorkerInfo) error {
 	b, _ := json.Marshal(w.Services)
 	_, err := s.DB.Exec("INSERT INTO workers(id,url,services_json,load,last_heartbeat,status) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET url=excluded.url, services_json=excluded.services_json, load=excluded.load, last_heartbeat=excluded.last_heartbeat, status=excluded.status", w.ID, w.URL, string(b), w.Load, nowUnix(), w.Status)

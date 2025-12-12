@@ -1,5 +1,7 @@
 package engine
 
+// DefNode represents a node in the flow definition.
+// It contains configuration for various node types like executors, choices, parallels, etc.
 type DefNode struct {
 	Kind     string `json:"kind"`
 	Service  string `json:"service"`
@@ -43,29 +45,34 @@ type DefNode struct {
 	FailureStrategy    string        `json:"failure_strategy"`
 }
 
+// DefEdge represents a transition between nodes.
 type DefEdge struct {
 	From   string `json:"from"`
 	Action string `json:"action"`
 	To     string `json:"to"`
 }
 
+// FlowDef represents the entire flow definition.
 type FlowDef struct {
 	Start string             `json:"start"`
 	Nodes map[string]DefNode `json:"nodes"`
 	Edges []DefEdge          `json:"edges"`
 }
 
+// EmbeddedFlow represents a sub-flow definition.
 type EmbeddedFlow struct {
 	Start string             `json:"start"`
 	Nodes map[string]DefNode `json:"nodes"`
 	Edges []DefEdge          `json:"edges"`
 }
 
+// ChoiceCase represents a single case in a choice node.
 type ChoiceCase struct {
 	Action string                 `json:"action"`
 	Expr   map[string]interface{} `json:"expr"`
 }
 
+// ExecSpec represents a specification for execution.
 type ExecSpec struct {
 	Service  string                 `json:"service"`
 	ExecType string                 `json:"exec_type"`

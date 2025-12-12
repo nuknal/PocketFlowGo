@@ -11,6 +11,8 @@ import (
 	"github.com/nuknal/PocketFlowGo/internal/store"
 )
 
+// Engine represents the core workflow execution engine.
+// It manages task execution, state transitions, and integration with the store.
 type Engine struct {
 	Store      *store.SQLite
 	HTTP       *http.Client
@@ -19,10 +21,12 @@ type Engine struct {
 	LocalFuncs map[string]func(context.Context, interface{}, map[string]interface{}) (interface{}, error)
 }
 
+// New creates a new Engine instance with the provided store.
 func New(s *store.SQLite) *Engine {
 	return &Engine{Store: s, HTTP: &http.Client{}, Log: log.Default(), Owner: "", LocalFuncs: map[string]func(context.Context, interface{}, map[string]interface{}) (interface{}, error){}}
 }
 
+// RegisterFunc registers a local function that can be called by executors.
 func (e *Engine) RegisterFunc(name string, fn func(context.Context, interface{}, map[string]interface{}) (interface{}, error)) {
 	if e.LocalFuncs == nil {
 		e.LocalFuncs = map[string]func(context.Context, interface{}, map[string]interface{}) (interface{}, error){}
@@ -147,6 +151,7 @@ func (e *Engine) finishNode(t store.Task, def FlowDef, curr string, action strin
 }
 
 func (e *Engine) RunOnce(taskID string) error {
+	// 1. Fetch task and validate lease
 	t, err := e.Store.GetTask(taskID)
 	if err != nil {
 		return err
@@ -159,9 +164,13 @@ func (e *Engine) RunOnce(taskID string) error {
 			return errorString("lease_expired")
 		}
 	}
+
+	// 2. Handle cancellation
 	if t.Status == "canceling" {
 		return e.cancelTask(t)
 	}
+
+	// 3. Load flow definition
 	fv, err := e.Store.GetFlowVersionByID(t.FlowVersionID)
 	if err != nil {
 		return err
@@ -170,6 +179,8 @@ func (e *Engine) RunOnce(taskID string) error {
 	if err := json.Unmarshal([]byte(fv.DefinitionJSON), &def); err != nil {
 		return err
 	}
+
+	// 4. Prepare context for current node
 	curr := t.CurrentNodeKey
 	node := def.Nodes[curr]
 	shared := map[string]interface{}{}
@@ -180,6 +191,8 @@ func (e *Engine) RunOnce(taskID string) error {
 		params[k] = v
 	}
 	input := e.buildInput(node, shared, params)
+
+	// 5. Dispatch based on node kind
 	switch {
 	case node.Kind == "choice":
 		return e.runChoice(t, def, node, curr, shared, params, input)

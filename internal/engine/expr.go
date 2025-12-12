@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+// evalExpr evaluates a boolean expression against the given context (shared, params, input).
+// It supports logic operators (and, or, not) and comparison operators (eq, ne, gt, lt, etc.).
 func evalExpr(expr map[string]interface{}, shared map[string]interface{}, params map[string]interface{}, input interface{}) bool {
 	if expr == nil {
 		return false
@@ -98,6 +100,7 @@ func evalExpr(expr map[string]interface{}, shared map[string]interface{}, params
 	return false
 }
 
+// toMap helper converts interface{} to map[string]interface{}.
 func toMap(v interface{}) map[string]interface{} {
 	if m, ok := v.(map[string]interface{}); ok {
 		return m
@@ -105,6 +108,7 @@ func toMap(v interface{}) map[string]interface{} {
 	return map[string]interface{}{"eq": []interface{}{v, true}}
 }
 
+// resolveVal resolves a value or a reference path (e.g., "$input.x").
 func resolveVal(v interface{}, shared map[string]interface{}, params map[string]interface{}, input interface{}) interface{} {
 	if s, ok := v.(string); ok {
 		return resolveRef(s, shared, params, input)
@@ -112,6 +116,7 @@ func resolveVal(v interface{}, shared map[string]interface{}, params map[string]
 	return v
 }
 
+// resolveRef resolves a variable reference path from params, shared state, or input.
 func resolveRef(path string, shared map[string]interface{}, params map[string]interface{}, input interface{}) interface{} {
 	if strings.HasPrefix(path, "$params.") {
 		k := strings.TrimPrefix(path, "$params.")
@@ -156,6 +161,7 @@ func asFloat(v interface{}) (float64, bool) {
 	return 0, false
 }
 
+// cmp compares two values (a and b) and returns -1 if a < b, 1 if a > b, 0 if equal.
 func cmp(a interface{}, b interface{}) int {
 	if fa, ok := asFloat(a); ok {
 		if fb, ok := asFloat(b); ok {

@@ -4,9 +4,12 @@ import (
 	"github.com/nuknal/PocketFlowGo/internal/store"
 )
 
+// runParallel executes multiple services in parallel (concurrently or sequentially).
 func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
 	svcs := node.ParallelServices
 	specs := map[string]ExecSpec{}
+	
+	// Collect configured services/executions
 	if len(node.ParallelExecs) > 0 {
 		svcs = []string{}
 		for _, sp := range node.ParallelExecs {
@@ -23,6 +26,8 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 			}
 		}
 	}
+	
+	// Handle no services case
 	if len(svcs) == 0 {
 		e.recordRun(t, curr, 1, "error", map[string]interface{}{"input_key": node.Prep.InputKey}, input, nil, "no services", "", "", "")
 		if e.Owner != "" {
@@ -37,6 +42,8 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 		}
 		return nil
 	}
+
+	// Initialize runtime state for parallel execution
 	rt, _ := shared["_rt"].(map[string]interface{})
 	if rt == nil {
 		rt = map[string]interface{}{}
@@ -48,6 +55,8 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 	}
 	done := pl["done"].(map[string]interface{})
 	errs := pl["errs"].(map[string]interface{})
+	
+	// Determine remaining services
 	remaining := []string{}
 	for _, sname := range svcs {
 		if _, ok := done[sname]; !ok {
@@ -55,6 +64,8 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 		}
 	}
 	e.logf("task=%s node=%s kind=parallel mode=%s remaining=%d total=%d", t.ID, curr, pl["mode"], len(remaining), len(svcs))
+
+	// If all completed, aggregate results and finish
 	if len(remaining) == 0 {
 		agg := make([]interface{}, 0, len(svcs))
 		for _, sname := range svcs {
@@ -83,6 +94,8 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 		}
 		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, errorString("parallel error"))
 	}
+
+	// Launch execution based on mode
 	mode := pl["mode"].(string)
 	if mode == "concurrent" {
 		max := node.MaxParallel

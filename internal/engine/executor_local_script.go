@@ -9,6 +9,8 @@ import (
     "time"
 )
 
+// execLocalScript executes a local shell command or script.
+// It supports setting working directory, environment variables, timeout, and stdin/stdout formats.
 func (e *Engine) execLocalScript(node DefNode, input interface{}, params map[string]interface{}) (interface{}, string, string, error) {
     attempts := 0
     for {
@@ -19,6 +21,8 @@ func (e *Engine) execLocalScript(node DefNode, input interface{}, params map[str
         }
         ctx, cancel := context.WithTimeout(context.Background(), to)
         cmd := exec.CommandContext(ctx, node.Script.Cmd, node.Script.Args...)
+        
+        // Configure execution environment
         if node.Script.WorkDir != "" {
             cmd.Dir = node.Script.WorkDir
         }
@@ -29,13 +33,18 @@ func (e *Engine) execLocalScript(node DefNode, input interface{}, params map[str
             }
             cmd.Env = env
         }
+
+        // Prepare input
         payload := map[string]interface{}{"input": input, "params": params}
         if node.Script.StdinMode == "json" {
             b, _ := json.Marshal(payload)
             cmd.Stdin = bytes.NewReader(b)
         }
+
         outb, err := cmd.CombinedOutput()
         cancel()
+
+        // Handle error and retries
         if err != nil {
             if node.AttemptDelayMillis > 0 {
                 time.Sleep(time.Duration(node.AttemptDelayMillis) * time.Millisecond)
@@ -45,6 +54,8 @@ func (e *Engine) execLocalScript(node DefNode, input interface{}, params map[str
             }
             continue
         }
+
+        // Parse output
         var res interface{}
         if node.Script.OutputMode == "json" {
             var v interface{}

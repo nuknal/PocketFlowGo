@@ -6,7 +6,9 @@ import (
 	"github.com/nuknal/PocketFlowGo/internal/store"
 )
 
+// runWaitEvent executes a 'wait_event' node, pausing execution until a signal is received or timeout occurs.
 func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
+	// Initialize runtime state
 	rt, _ := shared["_rt"].(map[string]interface{})
 	if rt == nil {
 		rt = map[string]interface{}{}
@@ -16,6 +18,8 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 	if we == nil {
 		we = map[string]interface{}{"start": time.Now().UnixMilli()}
 	}
+
+	// Resolve signal key and timeout configuration
 	signalKey := ""
 	if v, ok := params["signal_key"].(string); ok {
 		signalKey = v
@@ -28,6 +32,8 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 		timeout = v2
 	}
 	strat := node.FailureStrategy
+
+	// Check if signal received
 	if sig != nil && sig != "" && sig != false {
 		action := node.Post.ActionStatic
 		if action == "" && node.Post.ActionKey != "" {
@@ -45,6 +51,8 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"signal_key": signalKey}, input, sig, "", action, "", "")
 		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
 	}
+
+	// Check for timeout
 	start := int64(0)
 	if s, ok := we["start"].(int64); ok {
 		start = s
@@ -52,6 +60,7 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 		start = int64(s2)
 	}
 	if timeout > 0 && time.Now().UnixMilli()-start >= int64(timeout) {
+		// Handle timeout strategies
 		if strat == "retry" {
 			we["start"] = time.Now().UnixMilli()
 			rt[key] = we
@@ -71,6 +80,7 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 			e.recordRun(t, curr, 1, "ok", map[string]interface{}{"signal_key": signalKey}, input, nil, "", action, "", "")
 			return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
 		}
+		// Default timeout behavior: fail
 		delete(rt, key)
 		if len(rt) == 0 {
 			delete(shared, "_rt")
@@ -80,6 +90,8 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 		e.recordRun(t, curr, 1, "error", map[string]interface{}{"signal_key": signalKey}, input, nil, "timeout", action, "", "")
 		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, errorString("timeout"))
 	}
+
+	// Update state and wait
 	rt[key] = we
 	shared["_rt"] = rt
     if e.Owner != "" { _ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running") } else { _ = e.Store.UpdateTaskStatus(t.ID, "running") }

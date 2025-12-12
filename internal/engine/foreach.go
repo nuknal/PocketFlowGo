@@ -4,15 +4,21 @@ import (
 	"github.com/nuknal/PocketFlowGo/internal/store"
 )
 
+// runForeach executes a 'foreach' node, iterating over a list of items.
+// It supports sequential or concurrent execution modes.
 func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
 	items := []interface{}{}
 	if arr, ok := input.([]interface{}); ok {
 		items = arr
 	}
+	
+	// Handle empty input list
 	if len(items) == 0 {
 		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, input, []interface{}{}, "", node.Post.ActionStatic, "", "")
 		return e.finishNode(t, def, curr, node.Post.ActionStatic, shared, t.StepCount+1, nil)
 	}
+
+	// Initialize runtime state for iteration
 	rt, _ := shared["_rt"].(map[string]interface{})
 	if rt == nil {
 		rt = map[string]interface{}{}
@@ -24,12 +30,16 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 	}
 	done := fe["done"].(map[string]interface{})
 	errs := fe["errs"].(map[string]interface{})
+	
+	// Determine remaining items to process
 	remaining := []int{}
 	for i := range items {
 		if _, ok := done[indexKey(i)]; !ok {
 			remaining = append(remaining, i)
 		}
 	}
+
+	// If all items processed, aggregate results and finish
 	if len(remaining) == 0 {
 		agg := make([]interface{}, 0, len(items))
 		for i := range items {
@@ -56,6 +66,8 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 		}
 		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, errorString("foreach error"))
 	}
+
+	// Process remaining items based on execution mode
 	mode := fe["mode"].(string)
 	if mode == "concurrent" {
 		max := node.MaxParallel
@@ -75,6 +87,8 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 		for _, sp := range node.ForeachExecs {
 			specByIdx[sp.Index] = sp
 		}
+		
+		// Launch concurrent goroutines
 		for _, i := range sel {
 			go func(ii int, it interface{}) {
 				use := DefNode{Service: node.Service, ExecType: node.ExecType, Func: node.Func, Script: node.Script, WeightedByLoad: node.WeightedByLoad, MaxAttempts: node.MaxAttempts, AttemptDelayMillis: node.AttemptDelayMillis}
