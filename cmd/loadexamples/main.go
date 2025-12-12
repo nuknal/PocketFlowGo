@@ -200,7 +200,7 @@ func detectSignals(def map[string]interface{}) map[string]interface{} {
 func main() {
 	base := os.Getenv("SCHEDULER_BASE")
 	if base == "" {
-		base = "http://localhost:8070"
+		base = "http://localhost:8070/api"
 	}
 	dir := "examples/flowjson"
 	names, contents, err := readDefs(dir)

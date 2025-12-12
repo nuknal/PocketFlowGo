@@ -121,7 +121,7 @@ func routeHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	regURL := os.Getenv("REGISTRY_URL")
 	if regURL == "" {
-		regURL = "http://localhost:8070"
+		regURL = "http://localhost:8070/api"
 	}
 	selfURL := os.Getenv("WORKER_URL")
 	if selfURL == "" {

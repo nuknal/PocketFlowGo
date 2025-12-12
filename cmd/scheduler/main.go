@@ -33,7 +33,34 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	mux.Handle("/", http.StripPrefix("/", http.FileServer(http.FS(distFS))))
+	// SPA fallback handler
+	fileServer := http.FileServer(http.FS(distFS))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// If path is API, let it 404 naturally if not handled
+		if len(r.URL.Path) >= 4 && r.URL.Path[:4] == "/api" {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Check if file exists in FS
+		path := r.URL.Path
+		if path == "/" {
+			path = "index.html"
+		} else if path[0] == '/' {
+			path = path[1:]
+		}
+
+		f, err := distFS.Open(path)
+		if err == nil {
+			f.Close()
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		// Fallback to index.html
+		r.URL.Path = "/"
+		fileServer.ServeHTTP(w, r)
+	})
 
 	go func() {
 		ttl := int64(15)

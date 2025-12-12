@@ -1,5 +1,6 @@
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8070'
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? 'http://localhost:8070' : '')
 
 export interface Worker {
   id: string
@@ -74,7 +75,9 @@ export const api = {
     const params = new URLSearchParams()
     if (service) params.append('service', service)
     if (ttl) params.append('ttl', ttl.toString())
-    const res = await fetch(`${API_BASE_URL}/workers/list?${params.toString()}`)
+    const res = await fetch(
+      `${API_BASE_URL}/api/api/workers/list?${params.toString()}`
+    )
     if (!res.ok) throw new Error('Failed to fetch workers')
     return res.json()
   },
@@ -90,19 +93,19 @@ export const api = {
     if (flowVersionId) params.append('flow_version_id', flowVersionId)
     params.append('page', page.toString())
     params.append('page_size', pageSize.toString())
-    const res = await fetch(`${API_BASE_URL}/tasks?${params.toString()}`)
+    const res = await fetch(`${API_BASE_URL}/api/tasks?${params.toString()}`)
     if (!res.ok) throw new Error('Failed to fetch tasks')
     return res.json()
   },
 
   getFlowVersion: async (id: string): Promise<FlowVersion> => {
-    const res = await fetch(`${API_BASE_URL}/flows/version/get?id=${id}`)
+    const res = await fetch(`${API_BASE_URL}/api/flows/version/get?id=${id}`)
     if (!res.ok) throw new Error('Failed to fetch flow version')
     return res.json()
   },
 
   getTask: async (id: string): Promise<Task> => {
-    const res = await fetch(`${API_BASE_URL}/tasks/get?id=${id}`)
+    const res = await fetch(`${API_BASE_URL}/api/tasks/get?id=${id}`)
     if (!res.ok) throw new Error('Failed to fetch task')
     return res.json()
   },
@@ -112,7 +115,7 @@ export const api = {
     version: number = 0,
     params: any = {}
   ): Promise<{ id: string }> => {
-    const res = await fetch(`${API_BASE_URL}/tasks`, {
+    const res = await fetch(`${API_BASE_URL}/api/tasks`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -128,7 +131,7 @@ export const api = {
   },
 
   getTaskRuns: async (taskId: string): Promise<NodeRun[]> => {
-    const res = await fetch(`${API_BASE_URL}/tasks/runs?task_id=${taskId}`)
+    const res = await fetch(`${API_BASE_URL}/api/tasks/runs?task_id=${taskId}`)
     if (!res.ok) throw new Error('Failed to fetch task runs')
     return res.json()
   },
@@ -140,13 +143,15 @@ export const api = {
     const params = new URLSearchParams()
     params.append('page', page.toString())
     params.append('page_size', pageSize.toString())
-    const res = await fetch(`${API_BASE_URL}/flows?${params.toString()}`)
+    const res = await fetch(`${API_BASE_URL}/api/flows?${params.toString()}`)
     if (!res.ok) throw new Error('Failed to fetch flows')
     return res.json()
   },
 
   getFlowVersions: async (flowId: string): Promise<FlowVersion[]> => {
-    const res = await fetch(`${API_BASE_URL}/flows/version?flow_id=${flowId}`)
+    const res = await fetch(
+      `${API_BASE_URL}/api/flows/version?flow_id=${flowId}`
+    )
     if (!res.ok) throw new Error('Failed to fetch flow versions')
     return res.json()
   },
@@ -155,7 +160,7 @@ export const api = {
     name: string,
     description: string = ''
   ): Promise<{ id: string }> => {
-    const res = await fetch(`${API_BASE_URL}/flows`, {
+    const res = await fetch(`${API_BASE_URL}/api/flows`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -172,7 +177,7 @@ export const api = {
     definition: string,
     status: string = 'published'
   ): Promise<{ id: string }> => {
-    const res = await fetch(`${API_BASE_URL}/flows/version`, {
+    const res = await fetch(`${API_BASE_URL}/api/flows/version`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

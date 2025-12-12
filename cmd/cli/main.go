@@ -40,7 +40,7 @@ func getJSON(base string, path string, out interface{}) error {
 func main() {
 	base := os.Getenv("SCHEDULER_BASE")
 	if base == "" {
-		base = "http://localhost:8070"
+		base = "http://localhost:8070/api"
 	}
 	examples := []struct {
 		name   string
