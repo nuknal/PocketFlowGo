@@ -10,6 +10,14 @@ PocketFlowGo is a lightweight, centralized task orchestration service written in
 - Crash-safe scheduling loop that resumes leased tasks
 - Async Queue (Pull Mode) for workers behind firewalls or long-running tasks
 
+## UI Preview
+
+<p align="center">
+  <img src="docs/screenshots/FlowDetails.png" alt="Flow Details" width="45%">
+  &nbsp; &nbsp;
+  <img src="docs/screenshots/TaskDetails.png" alt="Task Details" width="45%">
+</p>
+
 ## Quick Start
 
 Prerequisites: Go 1.20+
