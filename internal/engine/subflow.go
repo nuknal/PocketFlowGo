@@ -29,7 +29,7 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	sn := node.Subflow.Nodes[currSub]
 
 	// Prepare parameters and input for the sub-node
-	childParams := e.prepareSubNodeParams(node, sn, params)
+	childParams := e.prepareSubNodeParams(node, sn, params, currSub)
 	subInput := e.prepareSubNodeInput(sn, childParams, subShared)
 
 	// Determine execution configuration (overrides)
@@ -131,13 +131,22 @@ func (e *Engine) finishSubflow(t store.Task, def FlowDef, curr string, node DefN
 }
 
 // prepareSubNodeParams merges params for the sub-node
-func (e *Engine) prepareSubNodeParams(node DefNode, sn DefNode, params map[string]interface{}) map[string]interface{} {
+func (e *Engine) prepareSubNodeParams(node DefNode, sn DefNode, params map[string]interface{}, currSub string) map[string]interface{} {
 	childParams := map[string]interface{}{}
 	for k, v := range params {
 		childParams[k] = v
 	}
 	for k, v := range sn.Params {
 		childParams[k] = v
+	}
+	// Apply overrides from SubflowExecs
+	for _, sp := range node.SubflowExecs {
+		if sp.Node == currSub {
+			for k, v := range sp.Params {
+				childParams[k] = v
+			}
+			break
+		}
 	}
 	return childParams
 }
