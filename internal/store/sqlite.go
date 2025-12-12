@@ -38,6 +38,8 @@ func (s *SQLite) Init() error {
 		"CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, flow_version_id TEXT, status TEXT, params_json TEXT, shared_json TEXT, current_node_key TEXT, last_action TEXT, step_count INTEGER, retry_state_json TEXT, lease_owner TEXT, lease_expiry INTEGER, request_id TEXT, created_at INTEGER, updated_at INTEGER);",
 		"CREATE TABLE IF NOT EXISTS node_runs (id TEXT PRIMARY KEY, task_id TEXT, node_key TEXT, attempt_no INTEGER, status TEXT, prep_json TEXT, exec_input_json TEXT, exec_output_json TEXT, error_text TEXT, action TEXT, started_at INTEGER, finished_at INTEGER, worker_id TEXT, worker_url TEXT);",
 		"CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, url TEXT, services_json TEXT, load INTEGER, last_heartbeat INTEGER, status TEXT);",
+		"CREATE TABLE IF NOT EXISTS task_queue (id TEXT PRIMARY KEY, task_id TEXT, node_key TEXT, service TEXT, input_json TEXT, status TEXT, worker_id TEXT, created_at INTEGER, started_at INTEGER, timeout_at INTEGER);",
+		"CREATE INDEX IF NOT EXISTS idx_queue_service_status ON task_queue(service, status);",
 	}
 	for _, q := range stmts {
 		if _, err := s.DB.Exec(q); err != nil {
@@ -426,4 +428,113 @@ func (s *SQLite) ListNodeRuns(taskID string) ([]NodeRun, error) {
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+// QueueTask represents a task in the persistent queue
+type QueueTask struct {
+	ID        string `json:"id"`
+	TaskID    string `json:"task_id"`
+	NodeKey   string `json:"node_key"`
+	Service   string `json:"service"`
+	InputJSON string `json:"input_json"`
+	Status    string `json:"status"`
+	WorkerID  string `json:"worker_id"`
+	CreatedAt int64  `json:"created_at"`
+	StartedAt int64  `json:"started_at"`
+	TimeoutAt int64  `json:"timeout_at"`
+}
+
+// EnqueueTask adds a new task to the queue
+func (s *SQLite) EnqueueTask(taskID, nodeKey, service, inputJSON string) (string, error) {
+	id := genID("q")
+	_, err := s.DB.Exec("INSERT INTO task_queue(id,task_id,node_key,service,input_json,status,worker_id,created_at,started_at,timeout_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+		id, taskID, nodeKey, service, inputJSON, "pending", "", nowUnix(), 0, 0)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// PollQueue attempts to claim a pending task for the given services
+func (s *SQLite) PollQueue(workerID string, services []string, timeoutSec int64) (QueueTask, error) {
+	if len(services) == 0 {
+		return QueueTask{}, nil
+	}
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return QueueTask{}, err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
+
+	placeholders := strings.Repeat("?,", len(services))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]interface{}, len(services))
+	for i, svc := range services {
+		args[i] = svc
+	}
+
+	// Find oldest pending task matching services
+	q := fmt.Sprintf("SELECT id, task_id, node_key, service, input_json FROM task_queue WHERE status='pending' AND service IN (%s) ORDER BY created_at ASC LIMIT 1", placeholders)
+
+	var qt QueueTask
+	if err := tx.QueryRow(q, args...).Scan(&qt.ID, &qt.TaskID, &qt.NodeKey, &qt.Service, &qt.InputJSON); err != nil {
+		if err == sql.ErrNoRows {
+			return QueueTask{}, nil
+		}
+		return QueueTask{}, err
+	}
+
+	// Claim it
+	now := nowUnix()
+	timeoutAt := now + timeoutSec
+	res, err := tx.Exec("UPDATE task_queue SET status='claimed', worker_id=?, started_at=?, timeout_at=? WHERE id=? AND status='pending'",
+		workerID, now, timeoutAt, qt.ID)
+	if err != nil {
+		return QueueTask{}, err
+	}
+
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		// Race condition: someone else claimed it
+		return QueueTask{}, nil
+	}
+
+	qt.Status = "claimed"
+	qt.WorkerID = workerID
+	qt.StartedAt = now
+	qt.TimeoutAt = timeoutAt
+
+	return qt, nil
+}
+
+// CompleteQueueTask marks a queue task as completed (or failed)
+// Note: The actual result/error is stored in node_runs via a separate call, or we could add result columns here.
+// For now, we assume the engine will handle the result, but typically the worker reports result here.
+// To keep it simple, we'll just mark status here, and let the caller handle the data persistence elsewhere or add columns if needed.
+// Wait, the design says Worker calls /queue/complete with result. So we need to return the TaskID so the API can update the flow.
+func (s *SQLite) CompleteQueueTask(queueID string) (string, error) {
+	var taskID string
+	err := s.DB.QueryRow("SELECT task_id FROM task_queue WHERE id=?", queueID).Scan(&taskID)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = s.DB.Exec("UPDATE task_queue SET status='completed' WHERE id=?", queueID)
+	if err != nil {
+		return "", err
+	}
+	return taskID, nil
+}
+
+// FailQueueTask marks a queue task as failed
+func (s *SQLite) FailQueueTask(queueID string) error {
+	_, err := s.DB.Exec("UPDATE task_queue SET status='failed' WHERE id=?", queueID)
+	return err
 }

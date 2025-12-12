@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -10,6 +12,9 @@ import (
 
 	"github.com/nuknal/PocketFlowGo/internal/store"
 )
+
+var ErrAsyncPending = errors.New("async task pending")
+var ErrFatal = errors.New("fatal error")
 
 // Engine represents the core workflow execution engine.
 // It manages task execution, state transitions, and integration with the store.
@@ -47,7 +52,7 @@ func (e *Engine) buildInput(node DefNode, shared map[string]interface{}, params 
 			if strings.HasPrefix(path, "$") {
 				m[k] = resolveRef(path, shared, params, nil)
 			} else {
-				m[k] = getByPath(shared, path)
+				m[k] = path //getByPath(shared, path)
 			}
 		}
 		return m
@@ -88,6 +93,23 @@ func (e *Engine) cancelTask(t store.Task) error {
 		"worker_url":       "",
 	}
 	return e.Store.SaveNodeRun(nr)
+}
+
+func (e *Engine) suspendTask(t store.Task, status string, shared map[string]interface{}) error {
+	e.logf("task=%s suspended status=%s", t.ID, status)
+	// We need to save shared state because it might contain partial execution results (e.g. in parallel/foreach)
+	// UpdateTaskStatusOwned only updates status. We need UpdateTaskProgressOwned-like behavior but without moving the cursor.
+	// We can reuse UpdateTaskProgressOwned but keep current_node and last_action same.
+
+	if e.Owner != "" {
+		_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, status)
+		// Persist shared state. StepCount stays same? Or increment?
+		// If we suspend, we haven't finished the step. So StepCount stays.
+		// CurrentNode stays same.
+		return e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, t.CurrentNodeKey, t.LastAction, toJSON(shared), t.StepCount)
+	}
+	_ = e.Store.UpdateTaskStatus(t.ID, status)
+	return e.Store.UpdateTaskProgress(t.ID, t.CurrentNodeKey, t.LastAction, toJSON(shared), t.StepCount)
 }
 
 func (e *Engine) recordRun(t store.Task, curr string, attempt int, status string, prep map[string]interface{}, input interface{}, output interface{}, errText string, action string, workerID string, workerURL string) {
@@ -186,11 +208,20 @@ func (e *Engine) RunOnce(taskID string) error {
 	shared := map[string]interface{}{}
 	_ = json.Unmarshal([]byte(t.SharedJSON), &shared)
 	params := map[string]interface{}{}
-	_ = json.Unmarshal([]byte(t.ParamsJSON), &params)
+	// 1. Load Node defaults first
 	for k, v := range node.Params {
 		params[k] = v
 	}
+	// 2. Override with Task Params
+	var taskParams map[string]interface{}
+	_ = json.Unmarshal([]byte(t.ParamsJSON), &taskParams)
+	for k, v := range taskParams {
+		params[k] = v
+	}
 	input := e.buildInput(node, shared, params)
+
+	fmt.Println("input:", input)
+	fmt.Println("params:", params)
 
 	// 5. Dispatch based on node kind
 	switch {

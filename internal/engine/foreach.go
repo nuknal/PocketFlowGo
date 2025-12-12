@@ -11,7 +11,7 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 	if arr, ok := input.([]interface{}); ok {
 		items = arr
 	}
-	
+
 	// Handle empty input list
 	if len(items) == 0 {
 		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, input, []interface{}{}, "", node.Post.ActionStatic, "", "")
@@ -30,7 +30,7 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 	}
 	done := fe["done"].(map[string]interface{})
 	errs := fe["errs"].(map[string]interface{})
-	
+
 	// Determine remaining items to process
 	remaining := []int{}
 	for i := range items {
@@ -87,7 +87,7 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 		for _, sp := range node.ForeachExecs {
 			specByIdx[sp.Index] = sp
 		}
-		
+
 		// Launch concurrent goroutines
 		for _, i := range sel {
 			go func(ii int, it interface{}) {
@@ -112,13 +112,21 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 						}
 					}
 				}
-				r, wid, wurl, er := e.execExecutor(use, it, callParams)
+				r, wid, wurl, er := e.execExecutor(t, use, curr, it, callParams)
 				ch <- br{idx: ii, res: r, wid: wid, wurl: wurl, err: er}
 			}(i, items[i])
 		}
 		hadErr := false
+		hasPending := false
 		for i := 0; i < len(sel); i++ {
 			it := <-ch
+
+			if it.err == ErrAsyncPending {
+				hasPending = true
+				e.logf("task=%s node=%s branch=%d status=pending_queue", t.ID, curr, it.idx)
+				continue
+			}
+
 			e.recordRun(t, curr, 1, ternary(it.err == nil, "ok", "error"), map[string]interface{}{"branch": it.idx}, items[it.idx], it.res, errString(it.err), "", it.wid, it.wurl)
 			if it.err != nil {
 				hadErr = true
@@ -131,6 +139,11 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 		fe["errs"] = errs
 		rt[key] = fe
 		shared["_rt"] = rt
+
+		if hasPending {
+			return e.suspendTask(t, "waiting_queue", shared)
+		}
+
 		if node.FailureStrategy == "fail_fast" && hadErr {
 			agg := make([]interface{}, 0, len(items))
 			for i := range items {
@@ -200,9 +213,12 @@ func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string
 			}
 		}
 	}
-	execRes, workerID, workerURL, execErr := e.execExecutor(use, items[idx], callParams)
+	execRes, workerID, workerURL, execErr := e.execExecutor(t, use, curr, items[idx], callParams)
 	e.recordRun(t, curr, 1, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"branch": idx}, items[idx], execRes, errString(execErr), "", workerID, workerURL)
 	if execErr != nil {
+		if execErr == ErrAsyncPending {
+			return e.suspendTask(t, "waiting_queue", shared)
+		}
 		errs[indexKey(idx)] = errString(execErr)
 		fe["errs"] = errs
 		rt[key] = fe

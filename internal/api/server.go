@@ -57,7 +57,127 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/tasks/cancel", withCORS(s.handleCancel))
 	mux.HandleFunc("/api/tasks/runs", withCORS(s.handleTaskRuns))
 	mux.HandleFunc("/api/tasks/signal", withCORS(s.handleTaskSignal))
+	mux.HandleFunc("/api/queue/poll", withCORS(s.handleQueuePoll))
+	mux.HandleFunc("/api/queue/complete", withCORS(s.handleQueueComplete))
 }
+
+func (s *Server) handleQueuePoll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, map[string]string{"error": "method not allowed"}, 405)
+		return
+	}
+	var payload struct {
+		WorkerID string   `json:"worker_id"`
+		Services []string `json:"services"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, map[string]string{"error": "bad request"}, 400)
+		return
+	}
+
+	task, err := s.Store.PollQueue(payload.WorkerID, payload.Services, 60) // 60s visibility timeout
+	if err != nil {
+		writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		return
+	}
+	if task.ID == "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, task, 200)
+}
+
+func (s *Server) handleQueueComplete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, map[string]string{"error": "method not allowed"}, 405)
+		return
+	}
+	var payload struct {
+		QueueID string      `json:"queue_id"`
+		Result  interface{} `json:"result"`
+		Error   string      `json:"error"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, map[string]string{"error": "bad request"}, 400)
+		return
+	}
+
+	// 1. Mark queue task as completed
+	taskID, err := s.Store.CompleteQueueTask(payload.QueueID)
+	if err != nil {
+		writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		return
+	}
+
+	// 2. Fetch queue task details to know node_key (optional optimization: return node_key from CompleteQueueTask)
+	// For now, let's just use the engine to "Complete" the step.
+	// But wait, the engine state is "WAITING_QUEUE". We need to wake it up.
+	// The standard way is to record the run result and update the task status to PENDING so the scheduler picks it up.
+
+	// We need to fetch the task to get context
+	t, err := s.Store.GetTask(taskID)
+	if err != nil {
+		writeJSON(w, map[string]string{"error": "task not found"}, 404)
+		return
+	}
+
+	// 3. Record the run
+	// Note: We need the node_key. We can get it from the queue task if we had it, or from the task current_node.
+	// Let's assume queue task corresponds to current_node_key.
+
+	runStatus := "ok"
+	if payload.Error != "" {
+		runStatus = "error"
+	}
+
+	// We need to properly record the run.
+	// Using a simple map for now as per SaveNodeRun signature
+	run := map[string]interface{}{
+		"task_id":          t.ID,
+		"node_key":         t.CurrentNodeKey,
+		"attempt_no":       1, // Simplified for now
+		"status":           runStatus,
+		"prep_json":        "{}", // We don't have prep info here easily without reloading flow def
+		"exec_input_json":  "{}", // We don't have input here easily
+		"exec_output_json": "{}", // We will store result below
+		"error_text":       payload.Error,
+		"action":           "",
+		"started_at":       nowUnix(), // Approximate
+		"finished_at":      nowUnix(),
+		"worker_id":        "queue-worker", // We could track actual worker ID from payload if passed
+		"worker_url":       "queue",
+	}
+
+	if payload.Result != nil {
+		b, _ := json.Marshal(payload.Result)
+		run["exec_output_json"] = string(b)
+	}
+
+	if err := s.Store.SaveNodeRun(run); err != nil {
+		// Log error but continue
+	}
+
+	// 4. Update task status to PENDING so the scheduler picks it up and advances it
+	// BUT: The scheduler needs to know that this "PENDING" means "Resume from Queue Result".
+	// Currently, the engine re-executes the node if it's pending.
+	// We need a way to tell the engine "Skip execution, I have the result".
+	// A common pattern is to check if there's a successful run for the current node.
+
+	// Let's set it to PENDING. The Engine logic needs to be smart enough to see "Oh, I have a completed run for this node, let me just process output and move on."
+	// OR: We handle the transition right here (complex).
+	// OR: We introduce a new status "RESUMING".
+
+	// For this iteration, let's just set it to PENDING.
+	// We will modify the Engine to check for completed runs before executing.
+	if err := s.Store.UpdateTaskStatus(taskID, "pending"); err != nil {
+		writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		return
+	}
+
+	writeJSON(w, map[string]string{"ok": "1"}, 200)
+}
+
+func nowUnix() int64 { return time.Now().Unix() }
 
 func (s *Server) handleRegisterWorker(w http.ResponseWriter, r *http.Request) {
 	var payload struct {

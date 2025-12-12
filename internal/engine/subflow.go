@@ -22,7 +22,7 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	}
 	currSub, _ := sf["curr"].(string)
 	subShared, _ := sf["shared"].(map[string]interface{})
-	
+
 	// Handle retry strategy delay
 	strat := node.FailureStrategy
 	if strat == "retry" {
@@ -76,7 +76,7 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 		e.logf("task=%s node=%s kind=subflow complete action=%s next=%s", t.ID, curr, action, next)
 		return nil
 	}
-	
+
 	// Prepare execution for the current node in subflow
 	e.logf("task=%s node=%s kind=subflow sub=%s", t.ID, curr, currSub)
 	sn := node.Subflow.Nodes[currSub]
@@ -87,7 +87,7 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	for k, v := range sn.Params {
 		childParams[k] = v
 	}
-	
+
 	// Build input for sub-node
 	var subInput interface{}
 	if sn.Prep.InputMap != nil {
@@ -141,7 +141,7 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 			break
 		}
 	}
-	execRes, workerID, workerURL, execErr := e.execExecutor(eff, subInput, childParams)
+	execRes, workerID, workerURL, execErr := e.execExecutor(t, eff, curr, subInput, childParams)
 	subAction := ""
 	if execErr == nil {
 		if sn.Post.OutputMap != nil {
@@ -163,6 +163,9 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	e.logf("task=%s node=%s kind=subflow sub=%s status=%s action=%s", t.ID, curr, currSub, ternary(execErr == nil, "ok", "error"), subAction)
 	e.recordRun(t, curr, 1, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"input_key": sn.Prep.InputKey, "sub": currSub}, subInput, execRes, errString(execErr), subAction, workerID, workerURL)
 	if execErr != nil {
+		if execErr == ErrAsyncPending {
+			return e.suspendTask(t, "waiting_queue", shared)
+		}
 		if strat == "retry" {
 			rcount := 0
 			if v, ok := sf["retries"].(int); ok {

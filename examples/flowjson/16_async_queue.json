@@ -1,0 +1,46 @@
+{
+  "start": "async_step",
+  "nodes": {
+    "async_step": {
+      "kind": "executor",
+      "exec_type": "queue",
+      "service": "async-transform",
+      "params": {
+        "text": "async-processing"
+      },
+      "prep": {
+        "input_map": {
+          "text": "$params.text",
+          "title": "Default Title"
+        }
+      },
+      "post": {
+        "output_key": "result",
+        "action_static": "end"
+      }
+    },
+    "end": {
+      "kind": "executor",
+      "exec_type": "local_func",
+      "func": "log_result",
+      "prep": {
+        "input_key": "$shared.result"
+      },
+      "post": {
+        "output_key": "local_out"
+      }
+    }
+  },
+  "edges": [
+    {
+      "from": "async_step",
+      "action": "end",
+      "to": "end"
+    },
+    {
+      "from": "end",
+      "action": "default",
+      "to": ""
+    }
+  ]
+}

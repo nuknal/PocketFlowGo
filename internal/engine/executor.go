@@ -19,7 +19,12 @@ func (e *Engine) runExecutorNode(t store.Task, def FlowDef, node DefNode, curr s
 	for {
 		attempts++
 		// Execute the logic
-		execRes, workerID, workerURL, execErr = e.execExecutor(node, input, params)
+		execRes, workerID, workerURL, execErr = e.execExecutor(t, node, curr, input, params)
+
+		// Handle Async Queue suspension
+		if execErr == ErrAsyncPending {
+			return e.suspendTask(t, "waiting_queue", shared)
+		}
 
 		// Log and record execution attempt
 		e.logf("task=%s node=%s kind=executor attempt=%d worker=%s status=%s", t.ID, curr, attempts, workerID, ternary(execErr == nil, "ok", "error"))
@@ -30,7 +35,7 @@ func (e *Engine) runExecutorNode(t store.Task, def FlowDef, node DefNode, curr s
 		}
 
 		// Check retry limits
-		if attempts > node.MaxRetries {
+		if execErr == ErrFatal || attempts > node.MaxRetries {
 			break
 		}
 
@@ -64,7 +69,7 @@ func (e *Engine) runExecutorNode(t store.Task, def FlowDef, node DefNode, curr s
 }
 
 // execExecutor dispatches execution to the appropriate handler based on ExecType.
-func (e *Engine) execExecutor(node DefNode, input interface{}, params map[string]interface{}) (interface{}, string, string, error) {
+func (e *Engine) execExecutor(t store.Task, node DefNode, curr string, input interface{}, params map[string]interface{}) (interface{}, string, string, error) {
 	et := node.ExecType
 	if et == "" {
 		et = "http"
@@ -76,6 +81,8 @@ func (e *Engine) execExecutor(node DefNode, input interface{}, params map[string
 		return e.execLocalFunc(node, input, params)
 	case "local_script":
 		return e.execLocalScript(node, input, params)
+	case "queue":
+		return e.execQueue(t, node, curr, input, params)
 	default:
 		return nil, "", "", errorString("unsupported exec")
 	}

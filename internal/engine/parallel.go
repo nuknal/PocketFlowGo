@@ -8,7 +8,7 @@ import (
 func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
 	svcs := node.ParallelServices
 	specs := map[string]ExecSpec{}
-	
+
 	// Collect configured services/executions
 	if len(node.ParallelExecs) > 0 {
 		svcs = []string{}
@@ -26,7 +26,7 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 			}
 		}
 	}
-	
+
 	// Handle no services case
 	if len(svcs) == 0 {
 		e.recordRun(t, curr, 1, "error", map[string]interface{}{"input_key": node.Prep.InputKey}, input, nil, "no services", "", "", "")
@@ -55,7 +55,7 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 	}
 	done := pl["done"].(map[string]interface{})
 	errs := pl["errs"].(map[string]interface{})
-	
+
 	// Determine remaining services
 	remaining := []string{}
 	for _, sname := range svcs {
@@ -135,14 +135,23 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 						}
 					}
 				}
-				r, wid, wurl, er := e.execExecutor(use, input, callParams)
+				r, wid, wurl, er := e.execExecutor(t, use, curr, input, callParams)
 				ch <- br{svc: sv, res: r, wid: wid, wurl: wurl, err: er}
 			}(sname)
 		}
 		hadErr := false
+		hasPending := false
 		for i := 0; i < len(toRun); i++ {
 			it := <-ch
-			e.logf("task=%s node=%s branch=%s status=%s", t.ID, curr, it.svc, ternary(it.err == nil, "ok", "error"))
+
+			if it.err == ErrAsyncPending {
+				hasPending = true
+				e.logf("task=%s node=%s branch=%s status=pending_queue", t.ID, curr, it.svc)
+				// Do not record run as error, just skip
+				continue
+			}
+
+			e.logf("task=%s node=%s branch=%s status=%s error=%v", t.ID, curr, it.svc, ternary(it.err == nil, "ok", "error"), it.err)
 			e.recordRun(t, curr, 1, ternary(it.err == nil, "ok", "error"), map[string]interface{}{"input_key": node.Prep.InputKey, "branch": it.svc}, input, it.res, errString(it.err), "", it.wid, it.wurl)
 			if it.err != nil {
 				hadErr = true
@@ -155,6 +164,12 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 		pl["errs"] = errs
 		rt[key] = pl
 		shared["_rt"] = rt
+
+		if hasPending {
+			// If any branch is pending, suspend the task
+			return e.suspendTask(t, "waiting_queue", shared)
+		}
+
 		strat := node.FailureStrategy
 		if strat == "fail_fast" && hadErr {
 			e.logf("task=%s node=%s fail_fast errors=%d", t.ID, curr, len(errs))
@@ -227,9 +242,12 @@ func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr strin
 			}
 		}
 	}
-	execRes, workerID, workerURL, execErr := e.execExecutor(use, input, callParams)
+	execRes, workerID, workerURL, execErr := e.execExecutor(t, use, curr, input, callParams)
 	e.recordRun(t, curr, 1, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"input_key": node.Prep.InputKey, "branch": nextSvc}, input, execRes, errString(execErr), "", workerID, workerURL)
 	if execErr != nil {
+		if execErr == ErrAsyncPending {
+			return e.suspendTask(t, "waiting_queue", shared)
+		}
 		errs[nextSvc] = errString(execErr)
 		pl["errs"] = errs
 		rt[key] = pl

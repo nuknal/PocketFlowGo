@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nuknal/PocketFlowGo/internal/api"
@@ -93,6 +95,20 @@ func main() {
 			}
 			return f * m, nil
 		})
+		eng.RegisterFunc("upper", func(ctx context.Context, input interface{}, params map[string]interface{}) (interface{}, error) {
+			fmt.Printf("UPPER: %v\n", input)
+			if s, ok := input.(string); ok {
+				return strings.ToUpper(s), nil
+			}
+			if s, ok := params["text"].(string); ok {
+				return strings.ToUpper(s), nil
+			}
+			return nil, fmt.Errorf("expected string input")
+		})
+		eng.RegisterFunc("log_result", func(ctx context.Context, input interface{}, params map[string]interface{}) (interface{}, error) {
+			fmt.Printf("LOG RESULT: %v\n", input)
+			return input, nil
+		})
 		owner := os.Getenv("SCHEDULER_OWNER")
 		if owner == "" {
 			hn, _ := os.Hostname()
@@ -108,9 +124,22 @@ func main() {
 			}
 			for {
 				_ = s.ExtendLease(t.ID, owner, ttl)
-				_ = eng.RunOnce(t.ID)
+				if err := eng.RunOnce(t.ID); err != nil {
+					// Check if it's a fatal/system error or just a regular execution failure.
+					// RunOnce normally handles node failures by updating status to failed (via finishNode).
+					// But if it returns an error here, it means something prevented it from finishing the node (e.g. panic, db error).
+					// We must mark it as failed to stop the loop.
+					// Note: ErrAsyncPending is handled inside RunOnce (suspends task), so RunOnce returns nil for it?
+					// Let's check executor.go: "return e.suspendTask(...)". suspendTask returns error.
+					// So if suspended, RunOnce returns error?
+					// suspendTask returns error only if DB update fails.
+					// So normally RunOnce returns nil even if suspended.
+					log.Printf("RunOnce error for task %s: %v", t.ID, err)
+					_ = s.UpdateTaskStatus(t.ID, "failed")
+					break
+				}
 				nt, _ := s.GetTask(t.ID)
-				if nt.Status == "completed" || nt.CurrentNodeKey == "" {
+				if nt.Status == "completed" || nt.Status == "failed" || nt.Status == "waiting_queue" || nt.CurrentNodeKey == "" {
 					break
 				}
 				time.Sleep(100 * time.Millisecond)

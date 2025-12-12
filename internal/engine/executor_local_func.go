@@ -11,7 +11,7 @@ func (e *Engine) execLocalFunc(node DefNode, input interface{}, params map[strin
 	attempts := 0
 	fn := e.LocalFuncs[node.Func]
 	if fn == nil {
-		return nil, "", "", errorString("no func")
+		return nil, "", "", ErrFatal
 	}
 
 	// Retry loop
