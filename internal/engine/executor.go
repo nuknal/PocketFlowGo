@@ -2,13 +2,11 @@ package engine
 
 import (
 	"time"
-
-	"github.com/nuknal/PocketFlowGo/internal/store"
 )
 
 // runExecutorNode executes a node of kind 'executor'.
 // It handles retries, input/output mapping, and transitions.
-func (e *Engine) runExecutorNode(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
+func (e *Engine) runExecutorNode(in NodeRunInput) error {
 	var execRes interface{}
 	var workerID, workerURL, logPath string
 	var execErr error
@@ -19,71 +17,85 @@ func (e *Engine) runExecutorNode(t store.Task, def FlowDef, node DefNode, curr s
 	for {
 		attempts++
 		// Execute the logic
-		execRes, workerID, workerURL, logPath, execErr = e.execExecutor(t, node, curr, input, params)
+		execIn := ExecutorInput{
+			Task:    in.Task,
+			Node:    in.Node,
+			NodeKey: in.NodeKey,
+			Input:   in.Input,
+			Params:  in.Params,
+		}
+		var res ExecutorResult
+		res = e.execExecutor(execIn)
+
+		execRes = res.Result
+		workerID = res.WorkerID
+		workerURL = res.WorkerURL
+		logPath = res.LogPath
+		execErr = res.Error
 
 		// Handle Async Queue suspension
 		if execErr == ErrAsyncPending {
-			return e.suspendTask(t, "waiting_queue", shared)
+			return e.suspendTask(in.Task, "waiting_queue", in.Shared)
 		}
 
 		// Log and record execution attempt
-		e.logf("task=%s node=%s kind=executor attempt=%d worker=%s status=%s", t.ID, curr, attempts, workerID, ternary(execErr == nil, "ok", "error"))
-		e.recordRun(t, curr, attempts, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"input_key": node.Prep.InputKey}, input, execRes, errString(execErr), action, workerID, workerURL, logPath)
+		e.logf("task=%s node=%s kind=executor attempt=%d worker=%s status=%s", in.Task.ID, in.NodeKey, attempts, workerID, ternary(execErr == nil, "ok", "error"))
+		e.recordRun(in.Task, in.NodeKey, attempts, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"input_key": in.Node.Prep.InputKey}, in.Input, execRes, errString(execErr), action, workerID, workerURL, logPath)
 
 		if execErr == nil {
 			break
 		}
 
 		// Check retry limits
-		if execErr == ErrFatal || attempts > node.MaxRetries {
+		if execErr == ErrFatal || attempts > in.Node.MaxRetries {
 			break
 		}
 
 		// Wait before retry
-		if node.WaitMillis > 0 {
-			time.Sleep(time.Duration(node.WaitMillis) * time.Millisecond)
+		if in.Node.WaitMillis > 0 {
+			time.Sleep(time.Duration(in.Node.WaitMillis) * time.Millisecond)
 		}
 	}
 
 	// If execution succeeded, handle outputs and determine next action
 	if execErr == nil {
-		if node.Post.OutputMap != nil {
+		if in.Node.Post.OutputMap != nil {
 			if mm, ok := execRes.(map[string]interface{}); ok {
-				for toKey, fromField := range node.Post.OutputMap {
-					shared[toKey] = mm[fromField]
+				for toKey, fromField := range in.Node.Post.OutputMap {
+					in.Shared[toKey] = mm[fromField]
 				}
 			}
 		}
-		if node.Post.OutputKey != "" {
-			shared[node.Post.OutputKey] = execRes
+		if in.Node.Post.OutputKey != "" {
+			in.Shared[in.Node.Post.OutputKey] = execRes
 		}
 
 		// Determine transition
-		if node.Post.ActionStatic != "" {
-			action = node.Post.ActionStatic
-		} else if node.Post.ActionKey != "" {
-			action = pickAction(execRes, node.Post.ActionKey)
+		if in.Node.Post.ActionStatic != "" {
+			action = in.Node.Post.ActionStatic
+		} else if in.Node.Post.ActionKey != "" {
+			action = pickAction(execRes, in.Node.Post.ActionKey)
 		}
 	}
-	return e.finishNode(t, def, curr, action, shared, t.StepCount+1, execErr)
+	return e.finishNode(in.Task, in.FlowDef, in.NodeKey, action, in.Shared, in.Task.StepCount+1, execErr)
 }
 
 // execExecutor dispatches execution to the appropriate handler based on ExecType.
-func (e *Engine) execExecutor(t store.Task, node DefNode, curr string, input interface{}, params map[string]interface{}) (interface{}, string, string, string, error) {
-	et := node.ExecType
+func (e *Engine) execExecutor(in ExecutorInput) ExecutorResult {
+	et := in.Node.ExecType
 	if et == "" {
 		et = "http"
 	}
 	switch et {
 	case "http":
-		return e.execHTTP(node, input, params)
+		return e.execHTTP(in)
 	case "local_func":
-		return e.execLocalFunc(node, input, params)
+		return e.execLocalFunc(in)
 	case "local_script":
-		return e.execLocalScript(t.ID, curr, node, input, params)
+		return e.execLocalScript(in)
 	case "queue":
-		return e.execQueue(t, node, curr, input, params)
+		return e.execQueue(in)
 	default:
-		return nil, "", "", "", errorString("unsupported exec")
+		return ExecutorResult{Error: errorString("unsupported exec")}
 	}
 }

@@ -1,5 +1,38 @@
 package engine
 
+import (
+	"github.com/nuknal/PocketFlowGo/internal/store"
+)
+
+// ExecutorInput encapsulates input parameters for execution.
+type ExecutorInput struct {
+	Task    store.Task             `json:"task"`
+	Node    DefNode                `json:"node"`
+	NodeKey string                 `json:"node_key"`
+	Input   interface{}            `json:"input"`
+	Params  map[string]interface{} `json:"params"`
+}
+
+// ExecutorResult encapsulates the result of execution.
+type ExecutorResult struct {
+	Result    interface{}
+	WorkerID  string
+	WorkerURL string
+	LogPath   string
+	Error     error
+}
+
+// NodeRunInput encapsulates input parameters for running a node.
+type NodeRunInput struct {
+	Task    store.Task             `json:"task"`
+	FlowDef FlowDef                `json:"flow_def"`
+	Node    DefNode                `json:"node"`
+	NodeKey string                 `json:"node_key"`
+	Shared  map[string]interface{} `json:"shared"`
+	Params  map[string]interface{} `json:"params"`
+	Input   interface{}            `json:"input"`
+}
+
 // DefNode represents a node in the flow definition.
 // It contains configuration for various node types like executors, choices, parallels, etc.
 type DefNode struct {

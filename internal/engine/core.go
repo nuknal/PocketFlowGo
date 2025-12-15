@@ -231,24 +231,34 @@ func (e *Engine) RunOnce(taskID string) error {
 	fmt.Println("params:", params)
 
 	// 5. Dispatch based on node kind
+	runInput := NodeRunInput{
+		Task:    t,
+		FlowDef: def,
+		Node:    node,
+		NodeKey: curr,
+		Shared:  shared,
+		Params:  params,
+		Input:   input,
+	}
+
 	switch {
 	case node.Kind == "choice":
-		return e.runChoice(t, def, node, curr, shared, params, input)
+		return e.runChoice(runInput)
 	case node.Kind == "parallel":
-		return e.runParallel(t, def, node, curr, shared, params, input)
+		return e.runParallel(runInput)
 	case node.Kind == "subflow" && node.Subflow != nil:
-		return e.runSubflow(t, def, node, curr, shared, params, input)
+		return e.runSubflow(runInput)
 	case node.Kind == "timer":
-		return e.runTimer(t, def, node, curr, shared, params, input)
+		return e.runTimer(runInput)
 	case node.Kind == "foreach":
-		return e.runForeach(t, def, node, curr, shared, params, input)
+		return e.runForeach(runInput)
 	case node.Kind == "wait_event":
-		return e.runWaitEvent(t, def, node, curr, shared, params, input)
+		return e.runWaitEvent(runInput)
 	case node.Kind == "approval":
-		return e.runApproval(t, def, node, curr, shared, params, input)
+		return e.runApproval(runInput)
 	case node.Kind == "executor" || node.Kind == "remote":
-		return e.runExecutorNode(t, def, node, curr, shared, params, input)
+		return e.runExecutorNode(runInput)
 	default:
-		return e.runExecutorNode(t, def, node, curr, shared, params, input)
+		return e.runExecutorNode(runInput)
 	}
 }

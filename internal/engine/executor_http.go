@@ -13,10 +13,10 @@ import (
 
 // execHTTP executes an HTTP request to a worker service.
 // It performs service discovery, load balancing, and retries across available workers.
-func (e *Engine) execHTTP(node DefNode, input interface{}, params map[string]interface{}) (interface{}, string, string, string, error) {
+func (e *Engine) execHTTP(in ExecutorInput) ExecutorResult {
 	// 1. Discover available workers
-	lst, _ := e.Store.ListWorkers(node.Service, 15)
-	
+	lst, _ := e.Store.ListWorkers(in.Node.Service, 15)
+
 	// Filter for HTTP workers only
 	var httpWorkers []store.WorkerInfo
 	for _, w := range lst {
@@ -27,22 +27,22 @@ func (e *Engine) execHTTP(node DefNode, input interface{}, params map[string]int
 	lst = httpWorkers
 
 	if len(lst) == 0 {
-		return nil, "", "", "", errorString("no worker")
+		return ExecutorResult{Error: errorString("no worker")}
 	}
 
 	// 2. Load balance (optionally weighted by load)
-	if node.WeightedByLoad {
+	if in.Node.WeightedByLoad {
 		sort.SliceStable(lst, func(i, j int) bool { return lst[i].Load < lst[j].Load })
 	}
 
-	payload := map[string]interface{}{"input": input, "params": params}
+	payload := map[string]interface{}{"input": in.Input, "params": in.Params}
 	b, _ := json.Marshal(payload)
 	attempts := 0
 
 	// 3. Try execution on workers
 	for _, w := range lst {
 		attempts++
-		endpoint := w.URL + "/exec/" + node.Service
+		endpoint := w.URL + "/exec/" + in.Node.Service
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewBuffer(b))
 		if err != nil {
@@ -59,26 +59,14 @@ func (e *Engine) execHTTP(node DefNode, input interface{}, params map[string]int
 			Result interface{} `json:"result"`
 			Error  string      `json:"error"`
 		}
-		dec := json.NewDecoder(resp.Body)
-		if err := dec.Decode(&out); err != nil {
+		if json.NewDecoder(resp.Body).Decode(&out) == nil {
 			resp.Body.Close()
-			cancel()
-			continue
+			if out.Error != "" {
+				return ExecutorResult{WorkerID: w.ID, WorkerURL: w.URL, Error: errorString(out.Error)}
+			}
+			return ExecutorResult{Result: out.Result, WorkerID: w.ID, WorkerURL: w.URL}
 		}
 		resp.Body.Close()
-		cancel()
-		
-		// Handle worker error
-		if out.Error != "" {
-			if node.AttemptDelayMillis > 0 {
-				time.Sleep(time.Duration(node.AttemptDelayMillis) * time.Millisecond)
-			}
-			if node.MaxAttempts > 0 && attempts >= node.MaxAttempts {
-				break
-			}
-			continue
-		}
-		return out.Result, w.ID, w.URL, "", nil
 	}
-	return nil, "", "", "", errorString("all workers failed")
+	return ExecutorResult{Error: errorString("all workers failed")}
 }

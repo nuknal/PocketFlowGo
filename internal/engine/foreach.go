@@ -8,34 +8,34 @@ import (
 
 // runForeach executes a 'foreach' node, iterating over a list of items.
 // It supports sequential or concurrent execution modes.
-func (e *Engine) runForeach(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
-	items := e.resolveItems(input)
+func (e *Engine) runForeach(in NodeRunInput) error {
+	items := e.resolveItems(in.Input)
 
 	// Handle empty input list
 	if len(items) == 0 {
-		return e.handleEmptyList(t, def, curr, node, input, shared)
+		return e.handleEmptyList(in.Task, in.FlowDef, in.NodeKey, in.Node, in.Input, in.Shared)
 	}
 
 	// Initialize runtime state for iteration
-	rt, fe, done, errs := e.initForeachState(t, curr, shared, node)
-	key := "fe:" + curr
+	rt, fe, done, errs := e.initForeachState(in.Task, in.NodeKey, in.Shared, in.Node)
+	key := "fe:" + in.NodeKey
 
 	// Determine remaining items to process
 	remaining := e.getRemainingItems(items, done, errs)
 
 	// If all items processed, aggregate results and finish
 	if len(remaining) == 0 {
-		return e.finishForeachNode(t, def, node, curr, shared, input, items, done, errs, rt, key)
+		return e.finishForeachNode(in.Task, in.FlowDef, in.Node, in.NodeKey, in.Shared, in.Input, items, done, errs, rt, key)
 	}
 
 	// Process remaining items based on execution mode
 	mode := fe["mode"].(string)
 	if mode == "concurrent" {
-		return e.runForeachConcurrent(t, def, node, curr, shared, params, input, items, remaining, fe, done, errs, rt, key)
+		return e.runForeachConcurrent(in, items, remaining, fe, done, errs, rt, key)
 	}
 
 	// Sequential mode
-	return e.runForeachSequential(t, def, node, curr, shared, params, input, items, remaining, fe, done, errs, rt, key)
+	return e.runForeachSequential(in, items, remaining, fe, done, errs, rt, key)
 }
 
 // resolveItems extracts the list of items from the input
@@ -112,8 +112,8 @@ func (e *Engine) finishForeachNode(t store.Task, def FlowDef, node DefNode, curr
 }
 
 // runForeachConcurrent executes items concurrently
-func (e *Engine) runForeachConcurrent(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}, items []interface{}, remaining []int, fe map[string]interface{}, done map[string]interface{}, errs map[string]interface{}, rt map[string]interface{}, key string) error {
-	max := node.MaxParallel
+func (e *Engine) runForeachConcurrent(in NodeRunInput, items []interface{}, remaining []int, fe map[string]interface{}, done map[string]interface{}, errs map[string]interface{}, rt map[string]interface{}, key string) error {
+	max := in.Node.MaxParallel
 	if max <= 0 || max > len(remaining) {
 		max = len(remaining)
 	}
@@ -132,9 +132,16 @@ func (e *Engine) runForeachConcurrent(t store.Task, def FlowDef, node DefNode, c
 	// Launch concurrent goroutines
 	for _, i := range sel {
 		go func(ii int, it interface{}) {
-			use, callParams := e.prepareForeachExecution(node, ii, params)
-			r, wid, wurl, lp, er := e.execExecutor(t, use, curr, it, callParams)
-			ch <- br{idx: ii, res: r, wid: wid, wurl: wurl, logPath: lp, err: er}
+			use, callParams := e.prepareForeachExecution(in.Node, ii, in.Params)
+			execIn := ExecutorInput{
+				Task:    in.Task,
+				Node:    use,
+				NodeKey: in.NodeKey,
+				Input:   it,
+				Params:  callParams,
+			}
+			res := e.execExecutor(execIn)
+			ch <- br{idx: ii, res: res.Result, wid: res.WorkerID, wurl: res.WorkerURL, logPath: res.LogPath, err: res.Error}
 		}(i, items[i])
 	}
 
@@ -145,11 +152,11 @@ func (e *Engine) runForeachConcurrent(t store.Task, def FlowDef, node DefNode, c
 
 		if it.err == ErrAsyncPending {
 			hasPending = true
-			e.logf("task=%s node=%s branch=%d status=pending_queue", t.ID, curr, it.idx)
+			e.logf("task=%s node=%s branch=%d status=pending_queue", in.Task.ID, in.NodeKey, it.idx)
 			continue
 		}
 
-		e.recordRunDetailed(t, curr, 1, ternary(it.err == nil, "ok", "error"), "item_complete", fmt.Sprintf("%d", it.idx), map[string]interface{}{"branch": it.idx}, items[it.idx], it.res, errString(it.err), "", it.wid, it.wurl, it.logPath)
+		e.recordRunDetailed(in.Task, in.NodeKey, 1, ternary(it.err == nil, "ok", "error"), "item_complete", fmt.Sprintf("%d", it.idx), map[string]interface{}{"branch": it.idx}, items[it.idx], it.res, errString(it.err), "", it.wid, it.wurl, it.logPath)
 		if it.err != nil {
 			hadErr = true
 			errs[indexKey(it.idx)] = it.err.Error()
@@ -161,51 +168,59 @@ func (e *Engine) runForeachConcurrent(t store.Task, def FlowDef, node DefNode, c
 	fe["done"] = done
 	fe["errs"] = errs
 	rt[key] = fe
-	shared["_rt"] = rt
+	in.Shared["_rt"] = rt
 
 	if hasPending {
-		return e.suspendTask(t, "waiting_queue", shared)
+		return e.suspendTask(in.Task, "waiting_queue", in.Shared)
 	}
 
-	if node.FailureStrategy == "fail_fast" && hadErr {
-		return e.handleForeachFailFast(t, def, node, curr, shared, items, done, errs)
+	if in.Node.FailureStrategy == "fail_fast" && hadErr {
+		return e.handleForeachFailFast(in.Task, in.FlowDef, in.Node, in.NodeKey, in.Shared, items, done, errs)
 	}
 
-	e.updateTaskRunning(t, curr, shared)
+	e.updateTaskRunning(in.Task, in.NodeKey, in.Shared)
 	return nil
 }
 
 // runForeachSequential executes items sequentially
-func (e *Engine) runForeachSequential(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}, items []interface{}, remaining []int, fe map[string]interface{}, done map[string]interface{}, errs map[string]interface{}, rt map[string]interface{}, key string) error {
+func (e *Engine) runForeachSequential(in NodeRunInput, items []interface{}, remaining []int, fe map[string]interface{}, done map[string]interface{}, errs map[string]interface{}, rt map[string]interface{}, key string) error {
 	if len(remaining) == 0 {
 		return nil
 	}
 	idx := remaining[0]
 
-	use, callParams := e.prepareForeachExecution(node, idx, params)
-	execRes, workerID, workerURL, logPath, execErr := e.execExecutor(t, use, curr, items[idx], callParams)
+	use, callParams := e.prepareForeachExecution(in.Node, idx, in.Params)
+	execIn := ExecutorInput{
+		Task:    in.Task,
+		Node:    use,
+		NodeKey: in.NodeKey,
+		Input:   items[idx],
+		Params:  callParams,
+	}
+	res := e.execExecutor(execIn)
+	execRes, workerID, workerURL, logPath, execErr := res.Result, res.WorkerID, res.WorkerURL, res.LogPath, res.Error
 
-	e.recordRunDetailed(t, curr, 1, ternary(execErr == nil, "ok", "error"), "item_complete", fmt.Sprintf("%d", idx), map[string]interface{}{"branch": idx}, items[idx], execRes, errString(execErr), "", workerID, workerURL, logPath)
+	e.recordRunDetailed(in.Task, in.NodeKey, 1, ternary(execErr == nil, "ok", "error"), "item_complete", fmt.Sprintf("%d", idx), map[string]interface{}{"branch": idx}, items[idx], execRes, errString(execErr), "", workerID, workerURL, logPath)
 
 	if execErr != nil {
 		if execErr == ErrAsyncPending {
-			return e.suspendTask(t, "waiting_queue", shared)
+			return e.suspendTask(in.Task, "waiting_queue", in.Shared)
 		}
 		errs[indexKey(idx)] = errString(execErr)
 		fe["errs"] = errs
 		rt[key] = fe
-		shared["_rt"] = rt
+		in.Shared["_rt"] = rt
 
-		e.updateTaskRunning(t, curr, shared)
+		e.updateTaskRunning(in.Task, in.NodeKey, in.Shared)
 		return nil
 	}
 
 	done[indexKey(idx)] = execRes
 	fe["done"] = done
 	rt[key] = fe
-	shared["_rt"] = rt
+	in.Shared["_rt"] = rt
 
-	e.updateTaskRunning(t, curr, shared)
+	e.updateTaskRunning(in.Task, in.NodeKey, in.Shared)
 	return nil
 }
 

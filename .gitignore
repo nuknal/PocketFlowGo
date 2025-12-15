@@ -2,3 +2,4 @@
 pocketflowgo
 scheduler
 logs/*
+internal/engine/logs/*

@@ -9,34 +9,42 @@ import (
 
 // runSubflow executes a nested flow definition.
 // It manages the subflow's state and progression independently of the main flow.
-func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
+func (e *Engine) runSubflow(in NodeRunInput) error {
 	// Initialize runtime state for subflow
-	rt, sf, currSub, subShared := e.initSubflowState(t, curr, node, shared)
-	key := "sf:" + curr
+	rt, sf, currSub, subShared := e.initSubflowState(in.Task, in.NodeKey, in.Node, in.Shared)
+	key := "sf:" + in.NodeKey
 
 	// Handle retry strategy delay
-	if e.handleSubflowRetryDelay(t, curr, node, shared, rt, sf, key) {
+	if e.handleSubflowRetryDelay(in.Task, in.NodeKey, in.Node, in.Shared, rt, sf, key) {
 		return nil
 	}
 
 	// Check if subflow execution is complete
 	if currSub == "" {
-		return e.finishSubflow(t, def, curr, node, shared, subShared, rt, key)
+		return e.finishSubflow(in.Task, in.FlowDef, in.NodeKey, in.Node, in.Shared, subShared, rt, key)
 	}
 
 	// Prepare execution for the current node in subflow
-	e.logf("task=%s node=%s kind=subflow sub=%s", t.ID, curr, currSub)
-	sn := node.Subflow.Nodes[currSub]
+	e.logf("task=%s node=%s kind=subflow sub=%s", in.Task.ID, in.NodeKey, currSub)
+	sn := in.Node.Subflow.Nodes[currSub]
 
 	// Prepare parameters and input for the sub-node
-	childParams := e.prepareSubNodeParams(node, sn, params, currSub)
+	childParams := e.prepareSubNodeParams(in.Node, sn, in.Params, currSub)
 	subInput := e.prepareSubNodeInput(sn, childParams, subShared)
 
 	// Determine execution configuration (overrides)
-	eff := e.resolveSubNodeConfig(node, currSub, sn)
+	eff := e.resolveSubNodeConfig(in.Node, currSub, sn)
 
 	// Execute the sub-node
-	execRes, workerID, workerURL, logPath, execErr := e.execExecutor(t, eff, curr, subInput, childParams)
+	execIn := ExecutorInput{
+		Task:    in.Task,
+		Node:    eff,
+		NodeKey: in.NodeKey,
+		Input:   subInput,
+		Params:  childParams,
+	}
+	res := e.execExecutor(execIn)
+	execRes, workerID, workerURL, logPath, execErr := res.Result, res.WorkerID, res.WorkerURL, res.LogPath, res.Error
 
 	// Process result and determine next action
 	subAction := ""
@@ -44,39 +52,39 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 		subAction = e.processSubNodeSuccess(sn, execRes, subShared)
 	}
 
-	e.logf("task=%s node=%s kind=subflow sub=%s status=%s action=%s", t.ID, curr, currSub, ternary(execErr == nil, "ok", "error"), subAction)
-	e.recordRunDetailed(t, curr, 1, ternary(execErr == nil, "ok", "error"), "sub_node_complete", currSub, map[string]interface{}{"input_key": sn.Prep.InputKey, "sub": currSub}, subInput, execRes, errString(execErr), subAction, workerID, workerURL, logPath)
+	e.logf("task=%s node=%s kind=subflow sub=%s status=%s action=%s", in.Task.ID, in.NodeKey, currSub, ternary(execErr == nil, "ok", "error"), subAction)
+	e.recordRunDetailed(in.Task, in.NodeKey, 1, ternary(execErr == nil, "ok", "error"), "sub_node_complete", currSub, map[string]interface{}{"input_key": sn.Prep.InputKey, "sub": currSub}, subInput, execRes, errString(execErr), subAction, workerID, workerURL, logPath)
 
 	if execErr != nil {
 		if execErr == ErrAsyncPending {
-			return e.suspendTask(t, "waiting_queue", shared)
+			return e.suspendTask(in.Task, "waiting_queue", in.Shared)
 		}
 
 		// Handle retry logic
-		if node.FailureStrategy == "retry" {
-			if e.handleSubflowRetry(t, curr, node, shared, rt, sf, key) {
+		if in.Node.FailureStrategy == "retry" {
+			if e.handleSubflowRetry(in.Task, in.NodeKey, in.Node, in.Shared, rt, sf, key) {
 				return nil
 			}
 			// Retries exhausted, fall through to fail
 		}
 
 		// Handle failure completion
-		return e.finishSubflowFailure(t, def, node, curr, shared, subShared, rt, key, execErr)
+		return e.finishSubflowFailure(in.Task, in.FlowDef, in.Node, in.NodeKey, in.Shared, subShared, rt, key, execErr)
 	}
 
 	// Transition to next sub-node
-	nextSub := findNext(node.Subflow.Edges, currSub, subAction)
+	nextSub := findNext(in.Node.Subflow.Edges, currSub, subAction)
 	if nextSub == "" {
 		// Subflow reached end
-		return e.finishSubflowSuccess(t, def, node, curr, shared, subShared, rt, key, subAction)
+		return e.finishSubflowSuccess(in.Task, in.FlowDef, in.Node, in.NodeKey, in.Shared, subShared, rt, key, subAction)
 	}
 
 	// Advance subflow state
 	sf["curr"] = nextSub
 	sf["shared"] = subShared
 	rt[key] = sf
-	shared["_rt"] = rt
-	e.updateTaskRunning(t, curr, shared)
+	in.Shared["_rt"] = rt
+	e.updateTaskRunning(in.Task, in.NodeKey, in.Shared)
 	return nil
 }
 

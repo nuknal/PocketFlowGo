@@ -13,32 +13,32 @@ import (
 
 // execLocalScript executes a local shell command or script.
 // It supports setting working directory, environment variables, timeout, and stdin/stdout formats.
-func (e *Engine) execLocalScript(taskID, nodeKey string, node DefNode, input interface{}, params map[string]interface{}) (interface{}, string, string, string, error) {
+func (e *Engine) execLocalScript(in ExecutorInput) ExecutorResult {
 	attempts := 0
 	for {
 		attempts++
 		to := 10 * time.Second
-		if node.Script.TimeoutMillis > 0 {
-			to = time.Duration(node.Script.TimeoutMillis) * time.Millisecond
+		if in.Node.Script.TimeoutMillis > 0 {
+			to = time.Duration(in.Node.Script.TimeoutMillis) * time.Millisecond
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), to)
-		cmd := exec.CommandContext(ctx, node.Script.Cmd, node.Script.Args...)
+		cmd := exec.CommandContext(ctx, in.Node.Script.Cmd, in.Node.Script.Args...)
 
 		// Configure execution environment
-		if node.Script.WorkDir != "" {
-			cmd.Dir = node.Script.WorkDir
+		if in.Node.Script.WorkDir != "" {
+			cmd.Dir = in.Node.Script.WorkDir
 		}
-		if node.Script.Env != nil {
+		if in.Node.Script.Env != nil {
 			env := os.Environ()
-			for k, v := range node.Script.Env {
+			for k, v := range in.Node.Script.Env {
 				env = append(env, k+"="+v)
 			}
 			cmd.Env = env
 		}
 
 		// Prepare input
-		payload := map[string]interface{}{"input": input, "params": params}
-		if node.Script.StdinMode == "json" {
+		payload := map[string]interface{}{"input": in.Input, "params": in.Params}
+		if in.Node.Script.StdinMode == "json" {
 			b, _ := json.Marshal(payload)
 			cmd.Stdin = bytes.NewReader(b)
 		}
@@ -47,17 +47,17 @@ func (e *Engine) execLocalScript(taskID, nodeKey string, node DefNode, input int
 		cancel()
 
 		// Save logs
-		logDir := filepath.Join("logs", "tasks", taskID)
+		logDir := filepath.Join("logs", "tasks", in.Task.ID)
 		_ = os.MkdirAll(logDir, 0755)
-		logPath := filepath.Join(logDir, fmt.Sprintf("%s_%d.log", nodeKey, attempts))
+		logPath := filepath.Join(logDir, fmt.Sprintf("%s_%d.log", in.NodeKey, attempts))
 		_ = os.WriteFile(logPath, outb, 0644)
 
 		// Handle error and retries
 		if err != nil {
-			if node.AttemptDelayMillis > 0 {
-				time.Sleep(time.Duration(node.AttemptDelayMillis) * time.Millisecond)
+			if in.Node.AttemptDelayMillis > 0 {
+				time.Sleep(time.Duration(in.Node.AttemptDelayMillis) * time.Millisecond)
 			}
-			if node.MaxAttempts == 0 || (node.MaxAttempts > 0 && attempts >= node.MaxAttempts) {
+			if in.Node.MaxAttempts == 0 || (in.Node.MaxAttempts > 0 && attempts >= in.Node.MaxAttempts) {
 				break
 			}
 			continue
@@ -65,7 +65,7 @@ func (e *Engine) execLocalScript(taskID, nodeKey string, node DefNode, input int
 
 		// Parse output
 		var res interface{}
-		if node.Script.OutputMode == "json" {
+		if in.Node.Script.OutputMode == "json" {
 			var v interface{}
 			if json.Unmarshal(outb, &v) == nil {
 				res = v
@@ -75,7 +75,7 @@ func (e *Engine) execLocalScript(taskID, nodeKey string, node DefNode, input int
 		} else {
 			res = string(outb)
 		}
-		return res, "local-script:" + node.Script.Cmd, "local", logPath, nil
+		return ExecutorResult{Result: res, WorkerID: "local-script:" + in.Node.Script.Cmd, WorkerURL: "local", LogPath: logPath}
 	}
-	return nil, "", "", "", errorString("failed")
+	return ExecutorResult{Error: errorString("failed")}
 }

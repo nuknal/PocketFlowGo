@@ -1,16 +1,12 @@
 package engine
 
-import (
-	"github.com/nuknal/PocketFlowGo/internal/store"
-)
-
-func (e *Engine) runApproval(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
+func (e *Engine) runApproval(in NodeRunInput) error {
 	// Initialize runtime state for approval if not exists
-	rt, _ := shared["_rt"].(map[string]interface{})
+	rt, _ := in.Shared["_rt"].(map[string]interface{})
 	if rt == nil {
 		rt = map[string]interface{}{}
 	}
-	key := "ap:" + curr
+	key := "ap:" + in.NodeKey
 	ap, _ := rt[key].(map[string]interface{})
 	if ap == nil {
 		ap = map[string]interface{}{}
@@ -18,19 +14,19 @@ func (e *Engine) runApproval(t store.Task, def FlowDef, node DefNode, curr strin
 
 	// Resolve the approval value from params
 	approvalKey := ""
-	if v, ok := params["approval_key"].(string); ok {
+	if v, ok := in.Params["approval_key"].(string); ok {
 		approvalKey = v
 	}
-	val := resolveRef(approvalKey, shared, params, input)
+	val := resolveRef(approvalKey, in.Shared, in.Params, in.Input)
 
 	decided := false
-	action := node.Post.ActionStatic
+	action := in.Node.Post.ActionStatic
 
 	// Check if approval decision has been made
 	if val != nil && val != "" {
 		decided = true
-		if node.Post.ActionKey != "" {
-			action = pickAction(map[string]interface{}{"approval": val}, node.Post.ActionKey)
+		if in.Node.Post.ActionKey != "" {
+			action = pickAction(map[string]interface{}{"approval": val}, in.Node.Post.ActionKey)
 		} else {
 			switch vv := val.(type) {
 			case bool:
@@ -49,32 +45,32 @@ func (e *Engine) runApproval(t store.Task, def FlowDef, node DefNode, curr strin
 
 	// If decided, proceed to next step
 	if decided {
-		if node.Post.OutputKey != "" {
-			shared[node.Post.OutputKey] = val
+		if in.Node.Post.OutputKey != "" {
+			in.Shared[in.Node.Post.OutputKey] = val
 		}
 		// Cleanup runtime state
 		delete(rt, key)
 		if len(rt) == 0 {
-			delete(shared, "_rt")
+			delete(in.Shared, "_rt")
 		} else {
-			shared["_rt"] = rt
+			in.Shared["_rt"] = rt
 		}
-		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"approval_key": approvalKey}, input, val, "", action, "", "", "")
-		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
+		e.recordRun(in.Task, in.NodeKey, 1, "ok", map[string]interface{}{"approval_key": approvalKey}, in.Input, val, "", action, "", "", "")
+		return e.finishNode(in.Task, in.FlowDef, in.NodeKey, action, in.Shared, in.Task.StepCount+1, nil)
 	}
 
 	// If not decided, suspend execution and wait
 	rt[key] = ap
-	shared["_rt"] = rt
+	in.Shared["_rt"] = rt
 	if e.Owner != "" {
-		_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+		_ = e.Store.UpdateTaskStatusOwned(in.Task.ID, e.Owner, "running")
 	} else {
-		_ = e.Store.UpdateTaskStatus(t.ID, "running")
+		_ = e.Store.UpdateTaskStatus(in.Task.ID, "running")
 	}
 	if e.Owner != "" {
-		_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+		_ = e.Store.UpdateTaskProgressOwned(in.Task.ID, e.Owner, in.NodeKey, "", toJSON(in.Shared), in.Task.StepCount+1)
 	} else {
-		_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+		_ = e.Store.UpdateTaskProgress(in.Task.ID, in.NodeKey, "", toJSON(in.Shared), in.Task.StepCount+1)
 	}
 	return nil
 }

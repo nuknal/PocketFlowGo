@@ -5,35 +5,35 @@ import (
 )
 
 // runParallel executes multiple services in parallel (concurrently or sequentially).
-func (e *Engine) runParallel(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
-	svcs, specs := e.resolveParallelServices(node, params)
+func (e *Engine) runParallel(in NodeRunInput) error {
+	svcs, specs := e.resolveParallelServices(in.Node, in.Params)
 
 	// Handle no services case
 	if len(svcs) == 0 {
-		return e.handleNoServices(t, curr, node, input, shared)
+		return e.handleNoServices(in.Task, in.NodeKey, in.Node, in.Input, in.Shared)
 	}
 
 	// Initialize runtime state for parallel execution
-	rt, pl, done, errs := e.initParallelState(t, curr, shared, node)
-	key := "pl:" + curr
+	rt, pl, done, errs := e.initParallelState(in.Task, in.NodeKey, in.Shared, in.Node)
+	key := "pl:" + in.NodeKey
 
 	// Determine remaining services
 	remaining := e.getRemainingServices(svcs, done, errs)
-	e.logf("task=%s node=%s kind=parallel mode=%s remaining=%d total=%d", t.ID, curr, pl["mode"], len(remaining), len(svcs))
+	e.logf("task=%s node=%s kind=parallel mode=%s remaining=%d total=%d", in.Task.ID, in.NodeKey, pl["mode"], len(remaining), len(svcs))
 
 	// If all completed, aggregate results and finish
 	if len(remaining) == 0 {
-		return e.finishParallelNode(t, def, node, curr, shared, input, svcs, done, errs, rt, key)
+		return e.finishParallelNode(in.Task, in.FlowDef, in.Node, in.NodeKey, in.Shared, in.Input, svcs, done, errs, rt, key)
 	}
 
 	// Launch execution based on mode
 	mode := pl["mode"].(string)
 	if mode == "concurrent" {
-		return e.runConcurrent(t, def, node, curr, shared, params, input, svcs, specs, remaining, pl, done, errs, rt, key)
+		return e.runConcurrent(in, svcs, specs, remaining, pl, done, errs, rt, key)
 	}
 
 	// Sequential mode
-	return e.runSequential(t, def, node, curr, shared, params, input, svcs, specs, pl, done, errs, rt, key, remaining)
+	return e.runSequential(in, svcs, specs, pl, done, errs, rt, key, remaining)
 }
 
 // resolveParallelServices determines the list of services to execute and their specs
@@ -131,13 +131,13 @@ func (e *Engine) finishParallelNode(t store.Task, def FlowDef, node DefNode, cur
 }
 
 // runConcurrent executes services concurrently
-func (e *Engine) runConcurrent(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}, svcs []string, specs map[string]ExecSpec, remaining []string, pl map[string]interface{}, done map[string]interface{}, errs map[string]interface{}, rt map[string]interface{}, key string) error {
-	max := node.MaxParallel
+func (e *Engine) runConcurrent(in NodeRunInput, svcs []string, specs map[string]ExecSpec, remaining []string, pl map[string]interface{}, done map[string]interface{}, errs map[string]interface{}, rt map[string]interface{}, key string) error {
+	max := in.Node.MaxParallel
 	if max <= 0 || max > len(remaining) {
 		max = len(remaining)
 	}
 	toRun := remaining[:max]
-	e.logf("task=%s node=%s parallel launch=%d", t.ID, curr, len(toRun))
+	e.logf("task=%s node=%s parallel launch=%d", in.Task.ID, in.NodeKey, len(toRun))
 
 	type br struct {
 		svc     string
@@ -151,9 +151,16 @@ func (e *Engine) runConcurrent(t store.Task, def FlowDef, node DefNode, curr str
 
 	for _, sname := range toRun {
 		go func(sv string) {
-			use, callParams := e.prepareExecution(node, specs, sv, params)
-			r, wid, wurl, lp, er := e.execExecutor(t, use, curr, input, callParams)
-			ch <- br{svc: sv, res: r, wid: wid, wurl: wurl, logPath: lp, err: er}
+			use, callParams := e.prepareExecution(in.Node, specs, sv, in.Params)
+			execIn := ExecutorInput{
+				Task:    in.Task,
+				Node:    use,
+				NodeKey: in.NodeKey,
+				Input:   in.Input,
+				Params:  callParams,
+			}
+			res := e.execExecutor(execIn)
+			ch <- br{svc: sv, res: res.Result, wid: res.WorkerID, wurl: res.WorkerURL, logPath: res.LogPath, err: res.Error}
 		}(sname)
 	}
 
@@ -164,12 +171,12 @@ func (e *Engine) runConcurrent(t store.Task, def FlowDef, node DefNode, curr str
 
 		if it.err == ErrAsyncPending {
 			hasPending = true
-			e.logf("task=%s node=%s branch=%s status=pending_queue", t.ID, curr, it.svc)
+			e.logf("task=%s node=%s branch=%s status=pending_queue", in.Task.ID, in.NodeKey, it.svc)
 			continue
 		}
 
-		e.logf("task=%s node=%s branch=%s status=%s error=%v", t.ID, curr, it.svc, ternary(it.err == nil, "ok", "error"), it.err)
-		e.recordRunDetailed(t, curr, 1, ternary(it.err == nil, "ok", "error"), "branch_complete", it.svc, map[string]interface{}{"input_key": node.Prep.InputKey, "branch": it.svc}, input, it.res, errString(it.err), "", it.wid, it.wurl, it.logPath)
+		e.logf("task=%s node=%s branch=%s status=%s error=%v", in.Task.ID, in.NodeKey, it.svc, ternary(it.err == nil, "ok", "error"), it.err)
+		e.recordRunDetailed(in.Task, in.NodeKey, 1, ternary(it.err == nil, "ok", "error"), "branch_complete", it.svc, map[string]interface{}{"input_key": in.Node.Prep.InputKey, "branch": it.svc}, in.Input, it.res, errString(it.err), "", it.wid, it.wurl, it.logPath)
 
 		if it.err != nil {
 			hadErr = true
@@ -183,55 +190,63 @@ func (e *Engine) runConcurrent(t store.Task, def FlowDef, node DefNode, curr str
 	pl["done"] = done
 	pl["errs"] = errs
 	rt[key] = pl
-	shared["_rt"] = rt
+	in.Shared["_rt"] = rt
 
 	if hasPending {
-		return e.suspendTask(t, "waiting_queue", shared)
+		return e.suspendTask(in.Task, "waiting_queue", in.Shared)
 	}
 
-	strat := node.FailureStrategy
+	strat := in.Node.FailureStrategy
 	if strat == "fail_fast" && hadErr {
-		return e.handleFailFast(t, def, node, curr, shared, svcs, done, errs)
+		return e.handleFailFast(in.Task, in.FlowDef, in.Node, in.NodeKey, in.Shared, svcs, done, errs)
 	}
 
-	e.updateTaskRunning(t, curr, shared)
+	e.updateTaskRunning(in.Task, in.NodeKey, in.Shared)
 	return nil
 }
 
 // runSequential executes services sequentially
-func (e *Engine) runSequential(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}, svcs []string, specs map[string]ExecSpec, pl map[string]interface{}, done map[string]interface{}, errs map[string]interface{}, rt map[string]interface{}, key string, remaining []string) error {
+func (e *Engine) runSequential(in NodeRunInput, svcs []string, specs map[string]ExecSpec, pl map[string]interface{}, done map[string]interface{}, errs map[string]interface{}, rt map[string]interface{}, key string, remaining []string) error {
 	if len(remaining) == 0 {
 		return nil
 	}
 	nextSvc := remaining[0]
 
-	e.logf("task=%s node=%s parallel next=%s", t.ID, curr, nextSvc)
+	e.logf("task=%s node=%s parallel next=%s", in.Task.ID, in.NodeKey, nextSvc)
 
-	use, callParams := e.prepareExecution(node, specs, nextSvc, params)
-	execRes, workerID, workerURL, logPath, execErr := e.execExecutor(t, use, curr, input, callParams)
+	use, callParams := e.prepareExecution(in.Node, specs, nextSvc, in.Params)
+	execIn := ExecutorInput{
+		Task:    in.Task,
+		Node:    use,
+		NodeKey: in.NodeKey,
+		Input:   in.Input,
+		Params:  callParams,
+	}
+	res := e.execExecutor(execIn)
+	execRes, workerID, workerURL, logPath, execErr := res.Result, res.WorkerID, res.WorkerURL, res.LogPath, res.Error
 
-	e.recordRunDetailed(t, curr, 1, ternary(execErr == nil, "ok", "error"), "branch_complete", nextSvc, map[string]interface{}{"input_key": node.Prep.InputKey, "branch": nextSvc}, input, execRes, errString(execErr), "", workerID, workerURL, logPath)
+	e.recordRunDetailed(in.Task, in.NodeKey, 1, ternary(execErr == nil, "ok", "error"), "branch_complete", nextSvc, map[string]interface{}{"input_key": in.Node.Prep.InputKey, "branch": nextSvc}, in.Input, execRes, errString(execErr), "", workerID, workerURL, logPath)
 
 	if execErr != nil {
 		if execErr == ErrAsyncPending {
-			return e.suspendTask(t, "waiting_queue", shared)
+			return e.suspendTask(in.Task, "waiting_queue", in.Shared)
 		}
 
 		errs[nextSvc] = errString(execErr)
 		pl["errs"] = errs
 		rt[key] = pl
-		shared["_rt"] = rt
+		in.Shared["_rt"] = rt
 
-		e.updateTaskRunning(t, curr, shared)
+		e.updateTaskRunning(in.Task, in.NodeKey, in.Shared)
 		return nil
 	}
 
 	done[nextSvc] = execRes
 	pl["done"] = done
 	rt[key] = pl
-	shared["_rt"] = rt
+	in.Shared["_rt"] = rt
 
-	e.updateTaskRunning(t, curr, shared)
+	e.updateTaskRunning(in.Task, in.NodeKey, in.Shared)
 	return nil
 }
 
