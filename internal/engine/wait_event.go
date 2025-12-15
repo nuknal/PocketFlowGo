@@ -48,7 +48,7 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 		} else {
 			shared["_rt"] = rt
 		}
-		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"signal_key": signalKey}, input, sig, "", action, "", "")
+		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"signal_key": signalKey}, input, sig, "", action, "", "", "")
 		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
 	}
 
@@ -65,8 +65,16 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 			we["start"] = time.Now().UnixMilli()
 			rt[key] = we
 			shared["_rt"] = rt
-            if e.Owner != "" { _ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running") } else { _ = e.Store.UpdateTaskStatus(t.ID, "running") }
-            if e.Owner != "" { _ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1) } else { _ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1) }
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+			} else {
+				_ = e.Store.UpdateTaskStatus(t.ID, "running")
+			}
+			if e.Owner != "" {
+				_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+			} else {
+				_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+			}
 			return nil
 		}
 		action := node.Post.ActionStatic
@@ -77,7 +85,7 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 			} else {
 				shared["_rt"] = rt
 			}
-			e.recordRun(t, curr, 1, "ok", map[string]interface{}{"signal_key": signalKey}, input, nil, "", action, "", "")
+			e.recordRun(t, curr, 1, "ok", map[string]interface{}{"signal_key": signalKey}, input, nil, "", action, "", "", "")
 			return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
 		}
 		// Default timeout behavior: fail
@@ -87,14 +95,22 @@ func (e *Engine) runWaitEvent(t store.Task, def FlowDef, node DefNode, curr stri
 		} else {
 			shared["_rt"] = rt
 		}
-		e.recordRun(t, curr, 1, "error", map[string]interface{}{"signal_key": signalKey}, input, nil, "timeout", action, "", "")
+		e.recordRun(t, curr, 1, "error", map[string]interface{}{"signal_key": signalKey}, input, nil, "timeout", action, "", "", "")
 		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, errorString("timeout"))
 	}
 
 	// Update state and wait
 	rt[key] = we
 	shared["_rt"] = rt
-    if e.Owner != "" { _ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running") } else { _ = e.Store.UpdateTaskStatus(t.ID, "running") }
-    if e.Owner != "" { _ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1) } else { _ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1) }
+	if e.Owner != "" {
+		_ = e.Store.UpdateTaskStatusOwned(t.ID, e.Owner, "running")
+	} else {
+		_ = e.Store.UpdateTaskStatus(t.ID, "running")
+	}
+	if e.Owner != "" {
+		_ = e.Store.UpdateTaskProgressOwned(t.ID, e.Owner, curr, "", toJSON(shared), t.StepCount+1)
+	} else {
+		_ = e.Store.UpdateTaskProgress(t.ID, curr, "", toJSON(shared), t.StepCount+1)
+	}
 	return nil
 }

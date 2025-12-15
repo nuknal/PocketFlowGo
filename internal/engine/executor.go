@@ -10,7 +10,7 @@ import (
 // It handles retries, input/output mapping, and transitions.
 func (e *Engine) runExecutorNode(t store.Task, def FlowDef, node DefNode, curr string, shared map[string]interface{}, params map[string]interface{}, input interface{}) error {
 	var execRes interface{}
-	var workerID, workerURL string
+	var workerID, workerURL, logPath string
 	var execErr error
 	action := ""
 	attempts := 0
@@ -19,7 +19,7 @@ func (e *Engine) runExecutorNode(t store.Task, def FlowDef, node DefNode, curr s
 	for {
 		attempts++
 		// Execute the logic
-		execRes, workerID, workerURL, execErr = e.execExecutor(t, node, curr, input, params)
+		execRes, workerID, workerURL, logPath, execErr = e.execExecutor(t, node, curr, input, params)
 
 		// Handle Async Queue suspension
 		if execErr == ErrAsyncPending {
@@ -28,7 +28,7 @@ func (e *Engine) runExecutorNode(t store.Task, def FlowDef, node DefNode, curr s
 
 		// Log and record execution attempt
 		e.logf("task=%s node=%s kind=executor attempt=%d worker=%s status=%s", t.ID, curr, attempts, workerID, ternary(execErr == nil, "ok", "error"))
-		e.recordRun(t, curr, attempts, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"input_key": node.Prep.InputKey}, input, execRes, errString(execErr), action, workerID, workerURL)
+		e.recordRun(t, curr, attempts, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"input_key": node.Prep.InputKey}, input, execRes, errString(execErr), action, workerID, workerURL, logPath)
 
 		if execErr == nil {
 			break
@@ -69,7 +69,7 @@ func (e *Engine) runExecutorNode(t store.Task, def FlowDef, node DefNode, curr s
 }
 
 // execExecutor dispatches execution to the appropriate handler based on ExecType.
-func (e *Engine) execExecutor(t store.Task, node DefNode, curr string, input interface{}, params map[string]interface{}) (interface{}, string, string, error) {
+func (e *Engine) execExecutor(t store.Task, node DefNode, curr string, input interface{}, params map[string]interface{}) (interface{}, string, string, string, error) {
 	et := node.ExecType
 	if et == "" {
 		et = "http"
@@ -80,10 +80,10 @@ func (e *Engine) execExecutor(t store.Task, node DefNode, curr string, input int
 	case "local_func":
 		return e.execLocalFunc(node, input, params)
 	case "local_script":
-		return e.execLocalScript(node, input, params)
+		return e.execLocalScript(t.ID, curr, node, input, params)
 	case "queue":
 		return e.execQueue(t, node, curr, input, params)
 	default:
-		return nil, "", "", errorString("unsupported exec")
+		return nil, "", "", "", errorString("unsupported exec")
 	}
 }

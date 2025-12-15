@@ -56,6 +56,7 @@ export interface NodeRun {
   finished_at: number
   worker_id: string
   worker_url: string
+  log_path?: string
 }
 
 export interface FlowVersion {
@@ -137,6 +138,19 @@ export const api = {
     const res = await fetch(`${API_BASE_URL}/api/tasks/runs?task_id=${taskId}`)
     if (!res.ok) throw new Error('Failed to fetch task runs')
     return res.json()
+  },
+
+  getRunLog: async (runId: string): Promise<{ content: string }> => {
+    const res = await fetch(`${API_BASE_URL}/api/tasks/logs?run_id=${runId}`)
+    if (!res.ok) throw new Error('Failed to fetch log')
+    return res.json()
+  },
+
+  runOnce: async (taskId: string): Promise<void> => {
+    const res = await fetch(`${API_BASE_URL}/api/tasks/run_once?id=${taskId}`, {
+      method: 'POST',
+    })
+    if (!res.ok) throw new Error('Failed to run task')
   },
 
   getFlows: async (

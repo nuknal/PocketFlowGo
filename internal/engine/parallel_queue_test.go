@@ -276,6 +276,7 @@ func TestParallelQueue_Mixed(t *testing.T) {
 		"finished_at":      time.Now().Unix(),
 		"worker_id":        "queue-worker", // Distinct ID
 		"worker_url":       "queue",
+		"log_path":         "",
 	}
 	s.SaveNodeRun(run)
 	s.CompleteQueueTask(qTask.ID)

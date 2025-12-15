@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Card,
   CardContent,
   CardDescription,
@@ -25,6 +31,20 @@ export default function TaskDetails() {
   const [task, setTask] = useState<Task | null>(null)
   const [runs, setRuns] = useState<NodeRun[]>([])
   const [loading, setLoading] = useState(true)
+  const [logContent, setLogContent] = useState<string | null>(null)
+  const [logOpen, setLogOpen] = useState(false)
+
+  const handleViewLog = async (runId: string) => {
+    try {
+      const res = await api.getRunLog(runId)
+      setLogContent(res.content)
+      setLogOpen(true)
+    } catch (error) {
+      console.error('Failed to fetch log:', error)
+      setLogContent('Failed to fetch log content.')
+      setLogOpen(true)
+    }
+  }
 
   useEffect(() => {
     if (!id) return
@@ -193,6 +213,7 @@ export default function TaskDetails() {
                 <TableHead>Worker</TableHead>
                 <TableHead>Started At</TableHead>
                 <TableHead>Duration</TableHead>
+                <TableHead>Log</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -238,6 +259,22 @@ export default function TaskDetails() {
                       ? `${(run.finished_at - run.started_at).toFixed(3)}s`
                       : '-'}
                   </TableCell>
+                  <TableCell
+                    className="text-xs max-w-[150px] truncate"
+                    title={run.log_path}
+                  >
+                    {run.log_path ? (
+                      <Button
+                        variant="link"
+                        className="p-0 h-auto font-mono text-xs"
+                        onClick={() => handleViewLog(run.id.toString())}
+                      >
+                        {run.log_path.split('/').pop()}
+                      </Button>
+                    ) : (
+                      '-'
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     {run.action || '-'}
                   </TableCell>
@@ -246,7 +283,7 @@ export default function TaskDetails() {
               {runs.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="text-center h-24 text-muted-foreground"
                   >
                     No execution history found.
@@ -257,6 +294,17 @@ export default function TaskDetails() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={logOpen} onOpenChange={setLogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Execution Log</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto bg-muted p-4 rounded-md font-mono text-xs whitespace-pre-wrap">
+            {logContent}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

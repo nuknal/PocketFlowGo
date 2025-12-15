@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -56,6 +57,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/tasks/run_once", withCORS(s.handleRunOnce))
 	mux.HandleFunc("/api/tasks/cancel", withCORS(s.handleCancel))
 	mux.HandleFunc("/api/tasks/runs", withCORS(s.handleTaskRuns))
+	mux.HandleFunc("/api/tasks/logs", withCORS(s.handleTaskLogs))
 	mux.HandleFunc("/api/tasks/signal", withCORS(s.handleTaskSignal))
 	mux.HandleFunc("/api/queue/poll", withCORS(s.handleQueuePoll))
 	mux.HandleFunc("/api/queue/complete", withCORS(s.handleQueueComplete))
@@ -146,6 +148,7 @@ func (s *Server) handleQueueComplete(w http.ResponseWriter, r *http.Request) {
 		"finished_at":      nowUnix(),
 		"worker_id":        "queue-worker", // We could track actual worker ID from payload if passed
 		"worker_url":       "queue",
+		"log_path":         "",
 	}
 
 	if payload.Result != nil {
@@ -175,6 +178,41 @@ func (s *Server) handleQueueComplete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]string{"ok": "1"}, 200)
+}
+
+func (s *Server) handleTaskLogs(w http.ResponseWriter, r *http.Request) {
+	runID := r.URL.Query().Get("run_id")
+	if runID == "" {
+		writeJSON(w, map[string]string{"error": "missing run_id"}, 400)
+		return
+	}
+
+	run, err := s.Store.GetNodeRun(runID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, map[string]string{"error": "run not found"}, 404)
+		} else {
+			writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		}
+		return
+	}
+
+	if run.LogPath == "" {
+		writeJSON(w, map[string]string{"error": "no log path"}, 404)
+		return
+	}
+
+	content, err := os.ReadFile(run.LogPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSON(w, map[string]string{"error": "log file not found"}, 404)
+		} else {
+			writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		}
+		return
+	}
+
+	writeJSON(w, map[string]string{"content": string(content)}, 200)
 }
 
 func nowUnix() int64 { return time.Now().Unix() }

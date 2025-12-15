@@ -59,7 +59,7 @@ func (e *Engine) runApproval(t store.Task, def FlowDef, node DefNode, curr strin
 		} else {
 			shared["_rt"] = rt
 		}
-		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"approval_key": approvalKey}, input, val, "", action, "", "")
+		e.recordRun(t, curr, 1, "ok", map[string]interface{}{"approval_key": approvalKey}, input, val, "", action, "", "", "")
 		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
 	}
 

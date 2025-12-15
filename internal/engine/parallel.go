@@ -62,7 +62,7 @@ func (e *Engine) resolveParallelServices(node DefNode, params map[string]interfa
 
 // handleNoServices handles the case where no services are resolved
 func (e *Engine) handleNoServices(t store.Task, curr string, node DefNode, input interface{}, shared map[string]interface{}) error {
-	e.recordRun(t, curr, 1, "error", map[string]interface{}{"input_key": node.Prep.InputKey}, input, nil, "no services", "", "", "")
+	e.recordRun(t, curr, 1, "error", map[string]interface{}{"input_key": node.Prep.InputKey}, input, nil, "no services", "", "", "", "")
 	e.updateTaskRunning(t, curr, shared)
 	return nil
 }
@@ -122,7 +122,7 @@ func (e *Engine) finishParallelNode(t store.Task, def FlowDef, node DefNode, cur
 
 	hasErr := len(errs) != 0
 	cont := node.FailureStrategy == "continue"
-	e.recordRun(t, curr, 1, ternary(!hasErr || cont, "ok", "error"), map[string]interface{}{"input_key": node.Prep.InputKey}, input, agg, ternary(!hasErr || cont, "", toJSON(errs)), action, "", "")
+	e.recordRun(t, curr, 1, ternary(!hasErr || cont, "ok", "error"), map[string]interface{}{"input_key": node.Prep.InputKey}, input, agg, ternary(!hasErr || cont, "", toJSON(errs)), action, "", "", "")
 
 	if !hasErr || cont {
 		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
@@ -140,19 +140,20 @@ func (e *Engine) runConcurrent(t store.Task, def FlowDef, node DefNode, curr str
 	e.logf("task=%s node=%s parallel launch=%d", t.ID, curr, len(toRun))
 
 	type br struct {
-		svc  string
-		res  interface{}
-		wid  string
-		wurl string
-		err  error
+		svc     string
+		res     interface{}
+		wid     string
+		wurl    string
+		logPath string
+		err     error
 	}
 	ch := make(chan br, len(toRun))
 
 	for _, sname := range toRun {
 		go func(sv string) {
 			use, callParams := e.prepareExecution(node, specs, sv, params)
-			r, wid, wurl, er := e.execExecutor(t, use, curr, input, callParams)
-			ch <- br{svc: sv, res: r, wid: wid, wurl: wurl, err: er}
+			r, wid, wurl, lp, er := e.execExecutor(t, use, curr, input, callParams)
+			ch <- br{svc: sv, res: r, wid: wid, wurl: wurl, logPath: lp, err: er}
 		}(sname)
 	}
 
@@ -168,7 +169,7 @@ func (e *Engine) runConcurrent(t store.Task, def FlowDef, node DefNode, curr str
 		}
 
 		e.logf("task=%s node=%s branch=%s status=%s error=%v", t.ID, curr, it.svc, ternary(it.err == nil, "ok", "error"), it.err)
-		e.recordRunDetailed(t, curr, 1, ternary(it.err == nil, "ok", "error"), "branch_complete", it.svc, map[string]interface{}{"input_key": node.Prep.InputKey, "branch": it.svc}, input, it.res, errString(it.err), "", it.wid, it.wurl)
+		e.recordRunDetailed(t, curr, 1, ternary(it.err == nil, "ok", "error"), "branch_complete", it.svc, map[string]interface{}{"input_key": node.Prep.InputKey, "branch": it.svc}, input, it.res, errString(it.err), "", it.wid, it.wurl, it.logPath)
 
 		if it.err != nil {
 			hadErr = true
@@ -207,9 +208,9 @@ func (e *Engine) runSequential(t store.Task, def FlowDef, node DefNode, curr str
 	e.logf("task=%s node=%s parallel next=%s", t.ID, curr, nextSvc)
 
 	use, callParams := e.prepareExecution(node, specs, nextSvc, params)
-	execRes, workerID, workerURL, execErr := e.execExecutor(t, use, curr, input, callParams)
+	execRes, workerID, workerURL, logPath, execErr := e.execExecutor(t, use, curr, input, callParams)
 
-	e.recordRunDetailed(t, curr, 1, ternary(execErr == nil, "ok", "error"), "branch_complete", nextSvc, map[string]interface{}{"input_key": node.Prep.InputKey, "branch": nextSvc}, input, execRes, errString(execErr), "", workerID, workerURL)
+	e.recordRunDetailed(t, curr, 1, ternary(execErr == nil, "ok", "error"), "branch_complete", nextSvc, map[string]interface{}{"input_key": node.Prep.InputKey, "branch": nextSvc}, input, execRes, errString(execErr), "", workerID, workerURL, logPath)
 
 	if execErr != nil {
 		if execErr == ErrAsyncPending {

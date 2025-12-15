@@ -1,3 +1,4 @@
 *.db
 pocketflowgo
 scheduler
+logs/*

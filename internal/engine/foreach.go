@@ -49,7 +49,7 @@ func (e *Engine) resolveItems(input interface{}) []interface{} {
 
 // handleEmptyList handles the case where the input list is empty
 func (e *Engine) handleEmptyList(t store.Task, def FlowDef, curr string, node DefNode, input interface{}, shared map[string]interface{}) error {
-	e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, input, []interface{}{}, "", node.Post.ActionStatic, "", "")
+	e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, input, []interface{}{}, "", node.Post.ActionStatic, "", "", "")
 	return e.finishNode(t, def, curr, node.Post.ActionStatic, shared, t.StepCount+1, nil)
 }
 
@@ -104,7 +104,7 @@ func (e *Engine) finishForeachNode(t store.Task, def FlowDef, node DefNode, curr
 	}
 	hasErr := len(errs) != 0
 	cont := node.FailureStrategy == "continue"
-	e.recordRun(t, curr, 1, ternary(!hasErr || cont, "ok", "error"), map[string]interface{}{"input_key": node.Prep.InputKey}, input, agg, ternary(!hasErr || cont, "", toJSON(errs)), action, "", "")
+	e.recordRun(t, curr, 1, ternary(!hasErr || cont, "ok", "error"), map[string]interface{}{"input_key": node.Prep.InputKey}, input, agg, ternary(!hasErr || cont, "", toJSON(errs)), action, "", "", "")
 	if !hasErr || cont {
 		return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
 	}
@@ -120,11 +120,12 @@ func (e *Engine) runForeachConcurrent(t store.Task, def FlowDef, node DefNode, c
 	sel := remaining[:max]
 
 	type br struct {
-		idx  int
-		res  interface{}
-		wid  string
-		wurl string
-		err  error
+		idx     int
+		res     interface{}
+		wid     string
+		wurl    string
+		logPath string
+		err     error
 	}
 	ch := make(chan br, len(sel))
 
@@ -132,8 +133,8 @@ func (e *Engine) runForeachConcurrent(t store.Task, def FlowDef, node DefNode, c
 	for _, i := range sel {
 		go func(ii int, it interface{}) {
 			use, callParams := e.prepareForeachExecution(node, ii, params)
-			r, wid, wurl, er := e.execExecutor(t, use, curr, it, callParams)
-			ch <- br{idx: ii, res: r, wid: wid, wurl: wurl, err: er}
+			r, wid, wurl, lp, er := e.execExecutor(t, use, curr, it, callParams)
+			ch <- br{idx: ii, res: r, wid: wid, wurl: wurl, logPath: lp, err: er}
 		}(i, items[i])
 	}
 
@@ -148,7 +149,7 @@ func (e *Engine) runForeachConcurrent(t store.Task, def FlowDef, node DefNode, c
 			continue
 		}
 
-		e.recordRunDetailed(t, curr, 1, ternary(it.err == nil, "ok", "error"), "item_complete", fmt.Sprintf("%d", it.idx), map[string]interface{}{"branch": it.idx}, items[it.idx], it.res, errString(it.err), "", it.wid, it.wurl)
+		e.recordRunDetailed(t, curr, 1, ternary(it.err == nil, "ok", "error"), "item_complete", fmt.Sprintf("%d", it.idx), map[string]interface{}{"branch": it.idx}, items[it.idx], it.res, errString(it.err), "", it.wid, it.wurl, it.logPath)
 		if it.err != nil {
 			hadErr = true
 			errs[indexKey(it.idx)] = it.err.Error()
@@ -182,9 +183,9 @@ func (e *Engine) runForeachSequential(t store.Task, def FlowDef, node DefNode, c
 	idx := remaining[0]
 
 	use, callParams := e.prepareForeachExecution(node, idx, params)
-	execRes, workerID, workerURL, execErr := e.execExecutor(t, use, curr, items[idx], callParams)
+	execRes, workerID, workerURL, logPath, execErr := e.execExecutor(t, use, curr, items[idx], callParams)
 
-	e.recordRunDetailed(t, curr, 1, ternary(execErr == nil, "ok", "error"), "item_complete", fmt.Sprintf("%d", idx), map[string]interface{}{"branch": idx}, items[idx], execRes, errString(execErr), "", workerID, workerURL)
+	e.recordRunDetailed(t, curr, 1, ternary(execErr == nil, "ok", "error"), "item_complete", fmt.Sprintf("%d", idx), map[string]interface{}{"branch": idx}, items[idx], execRes, errString(execErr), "", workerID, workerURL, logPath)
 
 	if execErr != nil {
 		if execErr == ErrAsyncPending {

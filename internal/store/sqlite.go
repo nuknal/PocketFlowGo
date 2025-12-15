@@ -36,7 +36,7 @@ func (s *SQLite) Init() error {
 		"CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, flow_version_id TEXT, node_key TEXT, service TEXT, kind TEXT, config_json TEXT);",
 		"CREATE TABLE IF NOT EXISTS edges (id TEXT PRIMARY KEY, flow_version_id TEXT, from_node_key TEXT, action TEXT, to_node_key TEXT);",
 		"CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, flow_version_id TEXT, status TEXT, params_json TEXT, shared_json TEXT, current_node_key TEXT, last_action TEXT, step_count INTEGER, retry_state_json TEXT, lease_owner TEXT, lease_expiry INTEGER, request_id TEXT, created_at INTEGER, updated_at INTEGER);",
-		"CREATE TABLE IF NOT EXISTS node_runs (id TEXT PRIMARY KEY, task_id TEXT, node_key TEXT, attempt_no INTEGER, status TEXT, sub_status TEXT, branch_id TEXT, prep_json TEXT, exec_input_json TEXT, exec_output_json TEXT, error_text TEXT, action TEXT, started_at INTEGER, finished_at INTEGER, worker_id TEXT, worker_url TEXT);",
+		"CREATE TABLE IF NOT EXISTS node_runs (id TEXT PRIMARY KEY, task_id TEXT, node_key TEXT, attempt_no INTEGER, status TEXT, sub_status TEXT, branch_id TEXT, prep_json TEXT, exec_input_json TEXT, exec_output_json TEXT, error_text TEXT, action TEXT, started_at INTEGER, finished_at INTEGER, worker_id TEXT, worker_url TEXT, log_path TEXT);",
 		"CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, url TEXT, services_json TEXT, load INTEGER, last_heartbeat INTEGER, status TEXT, type TEXT);",
 		"CREATE TABLE IF NOT EXISTS task_queue (id TEXT PRIMARY KEY, task_id TEXT, node_key TEXT, service TEXT, input_json TEXT, status TEXT, worker_id TEXT, created_at INTEGER, started_at INTEGER, timeout_at INTEGER);",
 		"CREATE INDEX IF NOT EXISTS idx_queue_service_status ON task_queue(service, status);",
@@ -53,6 +53,7 @@ func (s *SQLite) Init() error {
 	// Add sub_status and branch_id to node_runs
 	_, _ = s.DB.Exec("ALTER TABLE node_runs ADD COLUMN sub_status TEXT")
 	_, _ = s.DB.Exec("ALTER TABLE node_runs ADD COLUMN branch_id TEXT")
+	_, _ = s.DB.Exec("ALTER TABLE node_runs ADD COLUMN log_path TEXT")
 	return nil
 }
 
@@ -332,7 +333,7 @@ func (s *SQLite) UpdateTaskStatusOwned(id string, owner string, status string) e
 func (s *SQLite) SaveNodeRun(nr map[string]interface{}) error {
 	id := genID("run")
 	nr["id"] = id
-	cols := []string{"id", "task_id", "node_key", "attempt_no", "status", "sub_status", "branch_id", "prep_json", "exec_input_json", "exec_output_json", "error_text", "action", "started_at", "finished_at", "worker_id", "worker_url"}
+	cols := []string{"id", "task_id", "node_key", "attempt_no", "status", "sub_status", "branch_id", "prep_json", "exec_input_json", "exec_output_json", "error_text", "action", "started_at", "finished_at", "worker_id", "worker_url", "log_path"}
 	vals := make([]interface{}, 0, len(cols))
 	for _, c := range cols {
 		if val, ok := nr[c]; ok {
@@ -428,10 +429,11 @@ type NodeRun struct {
 	FinishedAt     int64  `json:"finished_at"`
 	WorkerID       string `json:"worker_id"`
 	WorkerURL      string `json:"worker_url"`
+	LogPath        string `json:"log_path"`
 }
 
 func (s *SQLite) ListNodeRuns(taskID string) ([]NodeRun, error) {
-	rows, err := s.DB.Query("SELECT id,task_id,node_key,attempt_no,status,sub_status,branch_id,prep_json,exec_input_json,exec_output_json,error_text,action,started_at,finished_at,worker_id,worker_url FROM node_runs WHERE task_id=? ORDER BY started_at ASC", taskID)
+	rows, err := s.DB.Query("SELECT id,task_id,node_key,attempt_no,status,sub_status,branch_id,prep_json,exec_input_json,exec_output_json,error_text,action,started_at,finished_at,worker_id,worker_url,log_path FROM node_runs WHERE task_id=? ORDER BY started_at ASC", taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -439,15 +441,29 @@ func (s *SQLite) ListNodeRuns(taskID string) ([]NodeRun, error) {
 	out := []NodeRun{}
 	for rows.Next() {
 		var r NodeRun
-		var sub, branch sql.NullString
-		if err := rows.Scan(&r.ID, &r.TaskID, &r.NodeKey, &r.AttemptNo, &r.Status, &sub, &branch, &r.PrepJSON, &r.ExecInputJSON, &r.ExecOutputJSON, &r.ErrorText, &r.Action, &r.StartedAt, &r.FinishedAt, &r.WorkerID, &r.WorkerURL); err != nil {
+		var sub, branch, lp sql.NullString
+		if err := rows.Scan(&r.ID, &r.TaskID, &r.NodeKey, &r.AttemptNo, &r.Status, &sub, &branch, &r.PrepJSON, &r.ExecInputJSON, &r.ExecOutputJSON, &r.ErrorText, &r.Action, &r.StartedAt, &r.FinishedAt, &r.WorkerID, &r.WorkerURL, &lp); err != nil {
 			return nil, err
 		}
 		r.SubStatus = sub.String
 		r.BranchID = branch.String
+		r.LogPath = lp.String
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+func (s *SQLite) GetNodeRun(id string) (NodeRun, error) {
+	row := s.DB.QueryRow("SELECT id,task_id,node_key,attempt_no,status,sub_status,branch_id,prep_json,exec_input_json,exec_output_json,error_text,action,started_at,finished_at,worker_id,worker_url,log_path FROM node_runs WHERE id=?", id)
+	var r NodeRun
+	var sub, branch, lp sql.NullString
+	if err := row.Scan(&r.ID, &r.TaskID, &r.NodeKey, &r.AttemptNo, &r.Status, &sub, &branch, &r.PrepJSON, &r.ExecInputJSON, &r.ExecOutputJSON, &r.ErrorText, &r.Action, &r.StartedAt, &r.FinishedAt, &r.WorkerID, &r.WorkerURL, &lp); err != nil {
+		return NodeRun{}, err
+	}
+	r.SubStatus = sub.String
+	r.BranchID = branch.String
+	r.LogPath = lp.String
+	return r, nil
 }
 
 // QueueTask represents a task in the persistent queue

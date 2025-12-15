@@ -7,11 +7,11 @@ import (
 
 // execLocalFunc executes a registered local Go function.
 // It is useful for lightweight tasks that don't require a separate worker service.
-func (e *Engine) execLocalFunc(node DefNode, input interface{}, params map[string]interface{}) (interface{}, string, string, error) {
+func (e *Engine) execLocalFunc(node DefNode, input interface{}, params map[string]interface{}) (interface{}, string, string, string, error) {
 	attempts := 0
 	fn := e.LocalFuncs[node.Func]
 	if fn == nil {
-		return nil, "", "", ErrFatal
+		return nil, "", "", "", ErrFatal
 	}
 
 	// Retry loop
@@ -31,7 +31,7 @@ func (e *Engine) execLocalFunc(node DefNode, input interface{}, params map[strin
 
 			continue
 		}
-		return res, "local-func:" + node.Func, "local", nil
+		return res, "local-func:" + node.Func, "local", "", nil
 	}
-	return nil, "local-func:" + node.Func, "local", errorString("failed")
+	return nil, "local-func:" + node.Func, "local", "", errorString("failed")
 }

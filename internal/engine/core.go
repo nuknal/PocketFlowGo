@@ -112,11 +112,11 @@ func (e *Engine) suspendTask(t store.Task, status string, shared map[string]inte
 	return e.Store.UpdateTaskProgress(t.ID, t.CurrentNodeKey, t.LastAction, toJSON(shared), t.StepCount)
 }
 
-func (e *Engine) recordRun(t store.Task, curr string, attempt int, status string, prep map[string]interface{}, input interface{}, output interface{}, errText string, action string, workerID string, workerURL string) {
-	e.recordRunDetailed(t, curr, attempt, status, "", "", prep, input, output, errText, action, workerID, workerURL)
+func (e *Engine) recordRun(t store.Task, curr string, attempt int, status string, prep map[string]interface{}, input interface{}, output interface{}, errText string, action string, workerID string, workerURL string, logPath string) {
+	e.recordRunDetailed(t, curr, attempt, status, "", "", prep, input, output, errText, action, workerID, workerURL, logPath)
 }
 
-func (e *Engine) recordRunDetailed(t store.Task, curr string, attempt int, status string, subStatus string, branchID string, prep map[string]interface{}, input interface{}, output interface{}, errText string, action string, workerID string, workerURL string) {
+func (e *Engine) recordRunDetailed(t store.Task, curr string, attempt int, status string, subStatus string, branchID string, prep map[string]interface{}, input interface{}, output interface{}, errText string, action string, workerID string, workerURL string, logPath string) {
 	nr := map[string]interface{}{
 		"task_id":          t.ID,
 		"node_key":         curr,
@@ -133,6 +133,7 @@ func (e *Engine) recordRunDetailed(t store.Task, curr string, attempt int, statu
 		"finished_at":      time.Now().Unix(),
 		"worker_id":        workerID,
 		"worker_url":       workerURL,
+		"log_path":         logPath,
 	}
 	_ = e.Store.SaveNodeRun(nr)
 }

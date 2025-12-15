@@ -36,7 +36,7 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	eff := e.resolveSubNodeConfig(node, currSub, sn)
 
 	// Execute the sub-node
-	execRes, workerID, workerURL, execErr := e.execExecutor(t, eff, curr, subInput, childParams)
+	execRes, workerID, workerURL, logPath, execErr := e.execExecutor(t, eff, curr, subInput, childParams)
 
 	// Process result and determine next action
 	subAction := ""
@@ -45,7 +45,7 @@ func (e *Engine) runSubflow(t store.Task, def FlowDef, node DefNode, curr string
 	}
 
 	e.logf("task=%s node=%s kind=subflow sub=%s status=%s action=%s", t.ID, curr, currSub, ternary(execErr == nil, "ok", "error"), subAction)
-	e.recordRunDetailed(t, curr, 1, ternary(execErr == nil, "ok", "error"), "sub_node_complete", currSub, map[string]interface{}{"input_key": sn.Prep.InputKey, "sub": currSub}, subInput, execRes, errString(execErr), subAction, workerID, workerURL)
+	e.recordRunDetailed(t, curr, 1, ternary(execErr == nil, "ok", "error"), "sub_node_complete", currSub, map[string]interface{}{"input_key": sn.Prep.InputKey, "sub": currSub}, subInput, execRes, errString(execErr), subAction, workerID, workerURL, logPath)
 
 	if execErr != nil {
 		if execErr == ErrAsyncPending {
@@ -121,7 +121,7 @@ func (e *Engine) handleSubflowRetryDelay(t store.Task, curr string, node DefNode
 // finishSubflow handles the case where the subflow itself is complete (empty current node)
 func (e *Engine) finishSubflow(t store.Task, def FlowDef, curr string, node DefNode, shared map[string]interface{}, subShared map[string]interface{}, rt map[string]interface{}, key string) error {
 	action := node.Post.ActionStatic
-	e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, nil, nil, "", action, "", "")
+	e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, nil, nil, "", action, "", "", "")
 
 	// Clean up runtime state if needed (though typically this is done when last node finishes)
 	// But here we might be re-entering a completed subflow?

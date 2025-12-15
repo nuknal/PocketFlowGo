@@ -42,6 +42,6 @@ func (e *Engine) runChoice(t store.Task, def FlowDef, node DefNode, curr string,
 	}
 
 	e.logf("task=%s node=%s kind=choice action=%s", t.ID, curr, action)
-	e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, input, nil, "", action, "", "")
+	e.recordRun(t, curr, 1, "ok", map[string]interface{}{"input_key": node.Prep.InputKey}, input, nil, "", action, "", "", "")
 	return e.finishNode(t, def, curr, action, shared, t.StepCount+1, nil)
 }
