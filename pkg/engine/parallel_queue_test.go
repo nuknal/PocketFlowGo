@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nuknal/PocketFlowGo/internal/store"
+	"github.com/nuknal/PocketFlowGo/pkg/store"
 )
 
 func TestParallelQueue_Mixed(t *testing.T) {

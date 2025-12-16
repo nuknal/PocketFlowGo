@@ -117,9 +117,9 @@ Queue (Pull Mode):
 - `cmd/scheduler`: HTTP API + scheduling loop
 - `cmd/worker`: HTTP worker providing services like `transform`, `sum`, `route`
 - `cmd/cli`: loads demo flows, creates tasks, and polls for completion
-- `internal/api`: HTTP handlers for flows, versions, tasks, workers
-- `internal/engine`: execution engine for nodes and edges
-- `internal/store`: SQLite schema and read/write operations
+- `pkg/server`: HTTP handlers for flows, versions, tasks, workers
+- `pkg/engine`: execution engine for nodes and edges
+- `pkg/store`: SQLite schema and read/write operations
 
 ## Testing
 

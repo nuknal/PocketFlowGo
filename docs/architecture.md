@@ -39,7 +39,7 @@
 - `workers`: `id,url,services_json,load,last_heartbeat,status,type`
 - `task_queue`: `id,task_id,node_key,service,input_json,status,worker_id,created_at,started_at,timeout_at`
 
-References: `internal/store/sqlite.go`
+References: `pkg/store/sqlite.go`
 
 ## Flow Definition (FlowDef JSON)
 
@@ -60,7 +60,7 @@ References: `internal/store/sqlite.go`
     - Retry/switching: `max_retries, wait_ms, max_attempts, attempt_delay_ms, weighted_by_load`
   - `edges`: `{from, action, to}`; `action='default'` denotes the fallback edge
 
-References: `internal/engine/types.go`
+References: `pkg/engine/types.go`
 
 ## HTTP API
 
@@ -87,7 +87,7 @@ References: `internal/engine/types.go`
   - `GET /api/tasks/runs?task_id=...` → node run history
   - `POST /api/tasks/signal` → write key/value into task shared state (for `wait_event/approval`)
 
-References: `internal/api/server.go`
+References: `pkg/server/server.go`
 
 ## Engine (Advance Once)
 
@@ -105,7 +105,7 @@ References: `internal/api/server.go`
   6. On failure with no successor edge, mark task `failed`
   7. If task is `canceling`, mark `canceled` and record a run
 
-References: `internal/engine/core.go`, `internal/engine/executor.go`
+References: `pkg/engine/core.go`, `pkg/engine/executor.go`
 
 ## Scheduling Loop & Leases
 
@@ -113,7 +113,7 @@ References: `internal/engine/core.go`, `internal/engine/executor.go`
 - Lease strategy: fields `lease_owner/lease_expiry` avoid duplicate execution; SQLite uses lease instead of row locks.
 - Manual Mode: `run_once` API allows external drivers to step through the task.
 
-References: `cmd/scheduler/main.go`, `internal/store/sqlite.go`
+References: `cmd/scheduler/main.go`, `pkg/store/sqlite.go`
 
 ## Worker Protocol & Implementation
 
@@ -217,14 +217,14 @@ References: `cmd/cli/main.go`
   - Runtime: `_rt.ap:<nodeKey>`
 
 References:
-- Node types & structs: `internal/engine/types.go`
-- Dispatch entry: `internal/engine/core.go`
-- Executor: `internal/engine/executor.go`
-- Parallel: `internal/engine/parallel.go`
-- Subflow: `internal/engine/subflow.go`
-- Choice: `internal/engine/choice.go`
-- Expression eval: `internal/engine/expr.go`
-- Timer: `internal/engine/timer.go`
-- Foreach: `internal/engine/foreach.go`
-- Wait event: `internal/engine/wait_event.go`
-- Approval: `internal/engine/approval.go`
+- Node types & structs: `pkg/engine/types.go`
+- Dispatch entry: `pkg/engine/core.go`
+- Executor: `pkg/engine/executor.go`
+- Parallel: `pkg/engine/parallel.go`
+- Subflow: `pkg/engine/subflow.go`
+- Choice: `pkg/engine/choice.go`
+- Expression eval: `pkg/engine/expr.go`
+- Timer: `pkg/engine/timer.go`
+- Foreach: `pkg/engine/foreach.go`
+- Wait event: `pkg/engine/wait_event.go`
+- Approval: `pkg/engine/approval.go`

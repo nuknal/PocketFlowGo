@@ -3,7 +3,7 @@ package engine
 import (
 	"fmt"
 
-	"github.com/nuknal/PocketFlowGo/internal/store"
+	"github.com/nuknal/PocketFlowGo/pkg/store"
 )
 
 // runForeach executes a 'foreach' node, iterating over a list of items.

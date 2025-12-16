@@ -2,5 +2,6 @@
 pocketflowgo
 scheduler
 logs/*
-internal/engine/logs/*
+pkg/engine/logs/*
 cmd/worker-async/logs/*
+.!*

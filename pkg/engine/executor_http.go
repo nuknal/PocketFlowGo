@@ -8,7 +8,7 @@ import (
     "sort"
     "time"
 
-    "github.com/nuknal/PocketFlowGo/internal/store"
+    "github.com/nuknal/PocketFlowGo/pkg/store"
 )
 
 // execHTTP executes an HTTP request to a worker service.

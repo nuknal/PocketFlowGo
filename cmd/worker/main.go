@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	f "github.com/nuknal/PocketFlowGo/internal/flow"
+	f "github.com/nuknal/PocketFlowGo/pkg/flow"
 )
 
 type execRequest struct {

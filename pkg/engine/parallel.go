@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"github.com/nuknal/PocketFlowGo/internal/store"
+	"github.com/nuknal/PocketFlowGo/pkg/store"
 )
 
 // runParallel executes multiple services in parallel (concurrently or sequentially).

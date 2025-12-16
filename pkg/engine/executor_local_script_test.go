@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/nuknal/PocketFlowGo/internal/store"
+	"github.com/nuknal/PocketFlowGo/pkg/store"
 )
 
 func TestExecLocalScript_Code(t *testing.T) {

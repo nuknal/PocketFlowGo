@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nuknal/PocketFlowGo/internal/store"
+	"github.com/nuknal/PocketFlowGo/pkg/store"
 )
 
 var ErrAsyncPending = errors.New("async task pending")

@@ -1,5 +1,5 @@
-// Package api provides the HTTP API server for PocketFlowGo.
-package api
+// Package server provides the HTTP API server for PocketFlowGo.
+package server
 
 import (
 	"database/sql"
@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nuknal/PocketFlowGo/internal/engine"
-	"github.com/nuknal/PocketFlowGo/internal/store"
+	"github.com/nuknal/PocketFlowGo/pkg/engine"
+	"github.com/nuknal/PocketFlowGo/pkg/store"
 	"gopkg.in/yaml.v3"
 )
 

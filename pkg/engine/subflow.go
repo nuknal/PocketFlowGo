@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nuknal/PocketFlowGo/internal/store"
+	"github.com/nuknal/PocketFlowGo/pkg/store"
 )
 
 // runSubflow executes a nested flow definition.

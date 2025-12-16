@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	f "github.com/nuknal/PocketFlowGo/internal/flow"
+	f "github.com/nuknal/PocketFlowGo/pkg/flow"
 )
 
 // QueueTask represents the task received from the queue

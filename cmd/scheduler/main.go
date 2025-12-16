@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nuknal/PocketFlowGo/internal/api"
-	"github.com/nuknal/PocketFlowGo/internal/engine"
-	"github.com/nuknal/PocketFlowGo/internal/store"
+	"github.com/nuknal/PocketFlowGo/pkg/engine"
+	"github.com/nuknal/PocketFlowGo/pkg/server"
+	"github.com/nuknal/PocketFlowGo/pkg/store"
 	"github.com/nuknal/PocketFlowGo/ui"
 )
 
@@ -24,7 +24,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	srv := &api.Server{Store: s}
+	srv := &server.Server{Store: s}
 	mux := http.NewServeMux()
 	srv.RegisterRoutes(mux)
 
