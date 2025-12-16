@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nuknal/PocketFlowGo/pkg/store"
+	"github.com/nuknal/PocketFlowGo/pkg/store/sqlstore"
 )
 
 func TestExecutorQueue_Basic(t *testing.T) {
@@ -14,7 +14,7 @@ func TestExecutorQueue_Basic(t *testing.T) {
 	dbPath := "test_queue_basic.db"
 	os.Remove(dbPath)
 	defer os.Remove(dbPath)
-	s, err := store.OpenSQLite(dbPath)
+	s, err := sqlstore.OpenSQLite(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}

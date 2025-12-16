@@ -16,7 +16,7 @@ import (
 )
 
 // Server serves the API endpoints.
-type Server struct{ Store *store.SQLite }
+type Server struct{ Store store.Store }
 
 func writeJSON(w http.ResponseWriter, v interface{}, code int) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")

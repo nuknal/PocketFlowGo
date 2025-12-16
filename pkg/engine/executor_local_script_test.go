@@ -6,7 +6,7 @@ import (
 	"github.com/nuknal/PocketFlowGo/pkg/store"
 )
 
-func TestExecLocalScript_Code(t *testing.T) {
+func TestExecLocalScript(t *testing.T) {
 	// Mock engine
 	e := &Engine{}
 

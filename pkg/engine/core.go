@@ -19,7 +19,7 @@ var ErrFatal = errors.New("fatal error")
 // Engine represents the core workflow execution engine.
 // It manages task execution, state transitions, and integration with the store.
 type Engine struct {
-	Store      *store.SQLite
+	Store      store.Store
 	HTTP       *http.Client
 	Log        *log.Logger
 	Owner      string
@@ -27,7 +27,7 @@ type Engine struct {
 }
 
 // New creates a new Engine instance with the provided store.
-func New(s *store.SQLite) *Engine {
+func New(s store.Store) *Engine {
 	return &Engine{Store: s, HTTP: &http.Client{}, Log: log.Default(), Owner: "", LocalFuncs: map[string]func(context.Context, interface{}, map[string]interface{}) (interface{}, error){}}
 }
 

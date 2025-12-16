@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nuknal/PocketFlowGo/pkg/store"
+	"github.com/nuknal/PocketFlowGo/pkg/store/sqlstore"
 )
 
 type execRequest struct {
@@ -21,7 +22,7 @@ type execResponse struct {
 	Error  string      `json:"error,omitempty"`
 }
 
-func startWorker(t *testing.T, s *store.SQLite) *httptest.Server {
+func startWorker(t *testing.T, s store.Store) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/exec/transform", func(w http.ResponseWriter, r *http.Request) {
 		var req execRequest
@@ -84,16 +85,16 @@ func startWorker(t *testing.T, s *store.SQLite) *httptest.Server {
 	return srv
 }
 
-func openTestStore(t *testing.T) *store.SQLite {
+func openTestStore(t *testing.T) store.Store {
 	p := t.TempDir() + "/test.db"
-	s, err := store.OpenSQLite(p)
+	s, err := sqlstore.OpenSQLite(p)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 	return s
 }
 
-func startBadWorker(t *testing.T, s *store.SQLite) *httptest.Server {
+func startBadWorker(t *testing.T, s store.Store) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/exec/transform", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(execResponse{Error: "fail"})

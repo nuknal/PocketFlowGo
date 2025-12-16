@@ -1,14 +1,13 @@
-package store
+package sqlstore
 
 import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/nuknal/PocketFlowGo/pkg/store"
 )
 
 // SQLite implements the Store interface using a SQLite database.
@@ -57,25 +56,12 @@ func (s *SQLite) Init() error {
 	return nil
 }
 
-func nowUnix() int64 { return time.Now().Unix() }
+func nowUnix() int64 { return store.NowUnix() }
 
-func GenID(prefix string) string { return fmt.Sprintf("%s-%s", prefix, uuid.New().String()) }
-
-func genID(prefix string) string { return GenID(prefix) }
-
-// WorkerInfo represents a registered worker node.
-type WorkerInfo struct {
-	ID            string   `json:"id"`
-	URL           string   `json:"url"`
-	Services      []string `json:"services"`
-	Load          int      `json:"load"`
-	LastHeartbeat int64    `json:"last_heartbeat"`
-	Status        string   `json:"status"`
-	Type          string   `json:"type"` // http, async, local
-}
+func genID(prefix string) string { return store.GenID(prefix) }
 
 // RegisterWorker registers or updates a worker in the database.
-func (s *SQLite) RegisterWorker(w WorkerInfo) error {
+func (s *SQLite) RegisterWorker(w store.WorkerInfo) error {
 	b, _ := json.Marshal(w.Services)
 	// Default to http if type is missing
 	if w.Type == "" {
@@ -99,13 +85,13 @@ func (s *SQLite) RefreshWorkersStatus(ttl int64) error {
 	return err
 }
 
-func (s *SQLite) ListWorkers(service string, ttl int64) ([]WorkerInfo, error) {
+func (s *SQLite) ListWorkers(service string, ttl int64) ([]store.WorkerInfo, error) {
 	rows, err := s.DB.Query("SELECT id,url,services_json,load,last_heartbeat,status,type FROM workers")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []WorkerInfo{}
+	out := []store.WorkerInfo{}
 	now := nowUnix()
 	for rows.Next() {
 		var id, url, sj, status string
@@ -132,23 +118,9 @@ func (s *SQLite) ListWorkers(service string, ttl int64) ([]WorkerInfo, error) {
 				continue
 			}
 		}
-		out = append(out, WorkerInfo{ID: id, URL: url, Services: arr, Load: load, LastHeartbeat: hb, Status: status, Type: typeStr.String})
+		out = append(out, store.WorkerInfo{ID: id, URL: url, Services: arr, Load: load, LastHeartbeat: hb, Status: status, Type: typeStr.String})
 	}
 	return out, nil
-}
-
-type Flow struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	CreatedAt   int64  `json:"created_at"`
-}
-type FlowVersion struct {
-	ID             string `json:"id"`
-	FlowID         string `json:"flow_id"`
-	Version        int    `json:"version"`
-	DefinitionJSON string `json:"definition_json"`
-	Status         string `json:"status"`
 }
 
 func (s *SQLite) CreateFlow(name string, description string) (string, error) {
@@ -169,7 +141,7 @@ func (s *SQLite) CreateFlowVersion(flowID string, version int, definitionJSON st
 	return id, nil
 }
 
-func (s *SQLite) ListFlows(limit, offset int) ([]Flow, int64, error) {
+func (s *SQLite) ListFlows(limit, offset int) ([]store.Flow, int64, error) {
 	var count int64
 	if err := s.DB.QueryRow("SELECT COUNT(*) FROM flows").Scan(&count); err != nil {
 		return nil, 0, err
@@ -185,9 +157,9 @@ func (s *SQLite) ListFlows(limit, offset int) ([]Flow, int64, error) {
 		return nil, 0, err
 	}
 	defer rows.Close()
-	var flows []Flow
+	var flows []store.Flow
 	for rows.Next() {
-		var f Flow
+		var f store.Flow
 		// Handle potential NULL description
 		var desc sql.NullString
 		if err := rows.Scan(&f.ID, &f.Name, &desc, &f.CreatedAt); err != nil {
@@ -199,15 +171,15 @@ func (s *SQLite) ListFlows(limit, offset int) ([]Flow, int64, error) {
 	return flows, count, nil
 }
 
-func (s *SQLite) ListFlowVersions(flowID string) ([]FlowVersion, error) {
+func (s *SQLite) ListFlowVersions(flowID string) ([]store.FlowVersion, error) {
 	rows, err := s.DB.Query("SELECT id, flow_id, version, definition_json, status FROM flow_versions WHERE flow_id=? ORDER BY version DESC", flowID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var versions []FlowVersion
+	var versions []store.FlowVersion
 	for rows.Next() {
-		var fv FlowVersion
+		var fv store.FlowVersion
 		if err := rows.Scan(&fv.ID, &fv.FlowID, &fv.Version, &fv.DefinitionJSON, &fv.Status); err != nil {
 			return nil, err
 		}
@@ -216,51 +188,31 @@ func (s *SQLite) ListFlowVersions(flowID string) ([]FlowVersion, error) {
 	return versions, nil
 }
 
-func (s *SQLite) LatestPublishedVersion(flowID string) (FlowVersion, error) {
+func (s *SQLite) LatestPublishedVersion(flowID string) (store.FlowVersion, error) {
 	row := s.DB.QueryRow("SELECT id,flow_id,version,definition_json,status FROM flow_versions WHERE flow_id=? AND status='published' ORDER BY version DESC LIMIT 1", flowID)
-	var fv FlowVersion
+	var fv store.FlowVersion
 	if err := row.Scan(&fv.ID, &fv.FlowID, &fv.Version, &fv.DefinitionJSON, &fv.Status); err != nil {
-		return FlowVersion{}, err
+		return store.FlowVersion{}, err
 	}
 	return fv, nil
 }
 
-func (s *SQLite) GetFlowVersionByFlowIDAndVersion(flowID string, version int) (FlowVersion, error) {
+func (s *SQLite) GetFlowVersionByFlowIDAndVersion(flowID string, version int) (store.FlowVersion, error) {
 	row := s.DB.QueryRow("SELECT id,flow_id,version,definition_json,status FROM flow_versions WHERE flow_id=? AND version=?", flowID, version)
-	var fv FlowVersion
+	var fv store.FlowVersion
 	if err := row.Scan(&fv.ID, &fv.FlowID, &fv.Version, &fv.DefinitionJSON, &fv.Status); err != nil {
-		return FlowVersion{}, err
+		return store.FlowVersion{}, err
 	}
 	return fv, nil
 }
 
-func (s *SQLite) GetFlowVersionByID(id string) (FlowVersion, error) {
+func (s *SQLite) GetFlowVersionByID(id string) (store.FlowVersion, error) {
 	row := s.DB.QueryRow("SELECT id,flow_id,version,definition_json,status FROM flow_versions WHERE id=?", id)
-	var fv FlowVersion
+	var fv store.FlowVersion
 	if err := row.Scan(&fv.ID, &fv.FlowID, &fv.Version, &fv.DefinitionJSON, &fv.Status); err != nil {
-		return FlowVersion{}, err
+		return store.FlowVersion{}, err
 	}
 	return fv, nil
-}
-
-type Task struct {
-	ID             string `json:"id"`
-	FlowVersionID  string `json:"flow_version_id"`
-	FlowID         string `json:"flow_id,omitempty"`
-	FlowName       string `json:"flow_name,omitempty"`
-	FlowVersion    int    `json:"flow_version,omitempty"`
-	Status         string `json:"status"`
-	ParamsJSON     string `json:"params_json"`
-	SharedJSON     string `json:"shared_json"`
-	CurrentNodeKey string `json:"current_node_key"`
-	LastAction     string `json:"last_action"`
-	StepCount      int    `json:"step_count"`
-	RetryStateJSON string `json:"retry_state_json"`
-	LeaseOwner     string `json:"lease_owner"`
-	LeaseExpiry    int64  `json:"lease_expiry"`
-	RequestID      string `json:"request_id"`
-	CreatedAt      int64  `json:"created_at"`
-	UpdatedAt      int64  `json:"updated_at"`
 }
 
 func (s *SQLite) CreateTask(flowVersionID string, paramsJSON string, requestID string, startNode string) (string, error) {
@@ -272,7 +224,7 @@ func (s *SQLite) CreateTask(flowVersionID string, paramsJSON string, requestID s
 	return id, nil
 }
 
-func (s *SQLite) GetTask(id string) (Task, error) {
+func (s *SQLite) GetTask(id string) (store.Task, error) {
 	q := `SELECT 
 		t.id, t.flow_version_id, t.status, t.params_json, t.shared_json, t.current_node_key, t.last_action, t.step_count, t.retry_state_json, t.lease_owner, t.lease_expiry, t.request_id, t.created_at, t.updated_at,
 		COALESCE(f.id, ''), COALESCE(f.name, ''), COALESCE(fv.version, 0)
@@ -281,17 +233,17 @@ func (s *SQLite) GetTask(id string) (Task, error) {
 	LEFT JOIN flows f ON fv.flow_id = f.id
 	WHERE t.id=?`
 	row := s.DB.QueryRow(q, id)
-	var t Task
+	var t store.Task
 	if err := row.Scan(&t.ID, &t.FlowVersionID, &t.Status, &t.ParamsJSON, &t.SharedJSON, &t.CurrentNodeKey, &t.LastAction, &t.StepCount, &t.RetryStateJSON, &t.LeaseOwner, &t.LeaseExpiry, &t.RequestID, &t.CreatedAt, &t.UpdatedAt, &t.FlowID, &t.FlowName, &t.FlowVersion); err != nil {
-		return Task{}, err
+		return store.Task{}, err
 	}
 	return t, nil
 }
 
-func (s *SQLite) LeaseNextTask(owner string, ttlSec int64) (Task, error) {
+func (s *SQLite) LeaseNextTask(owner string, ttlSec int64) (store.Task, error) {
 	tx, err := s.DB.Begin()
 	if err != nil {
-		return Task{}, err
+		return store.Task{}, err
 	}
 	defer func() {
 		if err != nil {
@@ -304,15 +256,15 @@ func (s *SQLite) LeaseNextTask(owner string, ttlSec int64) (Task, error) {
 	row := tx.QueryRow("SELECT id FROM tasks WHERE status IN ('pending','running') AND (lease_expiry=0 OR lease_expiry<?) ORDER BY updated_at ASC LIMIT 1", now)
 	var id string
 	if err = row.Scan(&id); err != nil {
-		return Task{}, err
+		return store.Task{}, err
 	}
 	res, uerr := tx.Exec("UPDATE tasks SET lease_owner=?, lease_expiry=?, status='running' WHERE id=? AND (lease_expiry=0 OR lease_expiry<?)", owner, now+ttlSec, id, now)
 	if uerr != nil {
-		return Task{}, uerr
+		return store.Task{}, uerr
 	}
 	aff, _ := res.RowsAffected()
 	if aff == 0 {
-		return Task{}, fmt.Errorf("lease_conflict")
+		return store.Task{}, fmt.Errorf("lease_conflict")
 	}
 	return s.GetTask(id)
 }
@@ -380,7 +332,7 @@ func (s *SQLite) UpdateTaskProgressOwned(id string, owner string, currentNode st
 	return err
 }
 
-func (s *SQLite) ListTasks(status string, flowVersionID string, limit, offset int) ([]Task, int64, error) {
+func (s *SQLite) ListTasks(status string, flowVersionID string, limit, offset int) ([]store.Task, int64, error) {
 	// Count query
 	countQ := `SELECT COUNT(*) FROM tasks t WHERE 1=1`
 	countArgs := []interface{}{}
@@ -423,9 +375,9 @@ func (s *SQLite) ListTasks(status string, flowVersionID string, limit, offset in
 		return nil, 0, err
 	}
 	defer rows.Close()
-	out := []Task{}
+	out := []store.Task{}
 	for rows.Next() {
-		var t Task
+		var t store.Task
 		if err := rows.Scan(&t.ID, &t.FlowVersionID, &t.Status, &t.ParamsJSON, &t.SharedJSON, &t.CurrentNodeKey, &t.LastAction, &t.StepCount, &t.RetryStateJSON, &t.LeaseOwner, &t.LeaseExpiry, &t.RequestID, &t.CreatedAt, &t.UpdatedAt, &t.FlowID, &t.FlowName, &t.FlowVersion); err != nil {
 			return nil, 0, err
 		}
@@ -434,35 +386,15 @@ func (s *SQLite) ListTasks(status string, flowVersionID string, limit, offset in
 	return out, count, nil
 }
 
-type NodeRun struct {
-	ID             string `json:"id"`
-	TaskID         string `json:"task_id"`
-	NodeKey        string `json:"node_key"`
-	AttemptNo      int    `json:"attempt_no"`
-	Status         string `json:"status"`
-	SubStatus      string `json:"sub_status"`
-	BranchID       string `json:"branch_id"`
-	PrepJSON       string `json:"prep_json"`
-	ExecInputJSON  string `json:"exec_input_json"`
-	ExecOutputJSON string `json:"exec_output_json"`
-	ErrorText      string `json:"error_text"`
-	Action         string `json:"action"`
-	StartedAt      int64  `json:"started_at"`
-	FinishedAt     int64  `json:"finished_at"`
-	WorkerID       string `json:"worker_id"`
-	WorkerURL      string `json:"worker_url"`
-	LogPath        string `json:"log_path"`
-}
-
-func (s *SQLite) ListNodeRuns(taskID string) ([]NodeRun, error) {
+func (s *SQLite) ListNodeRuns(taskID string) ([]store.NodeRun, error) {
 	rows, err := s.DB.Query("SELECT id,task_id,node_key,attempt_no,status,sub_status,branch_id,prep_json,exec_input_json,exec_output_json,error_text,action,started_at,finished_at,worker_id,worker_url,log_path FROM node_runs WHERE task_id=? ORDER BY started_at ASC", taskID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []NodeRun{}
+	out := []store.NodeRun{}
 	for rows.Next() {
-		var r NodeRun
+		var r store.NodeRun
 		var sub, branch, lp sql.NullString
 		if err := rows.Scan(&r.ID, &r.TaskID, &r.NodeKey, &r.AttemptNo, &r.Status, &sub, &branch, &r.PrepJSON, &r.ExecInputJSON, &r.ExecOutputJSON, &r.ErrorText, &r.Action, &r.StartedAt, &r.FinishedAt, &r.WorkerID, &r.WorkerURL, &lp); err != nil {
 			return nil, err
@@ -475,31 +407,17 @@ func (s *SQLite) ListNodeRuns(taskID string) ([]NodeRun, error) {
 	return out, nil
 }
 
-func (s *SQLite) GetNodeRun(id string) (NodeRun, error) {
+func (s *SQLite) GetNodeRun(id string) (store.NodeRun, error) {
 	row := s.DB.QueryRow("SELECT id,task_id,node_key,attempt_no,status,sub_status,branch_id,prep_json,exec_input_json,exec_output_json,error_text,action,started_at,finished_at,worker_id,worker_url,log_path FROM node_runs WHERE id=?", id)
-	var r NodeRun
+	var r store.NodeRun
 	var sub, branch, lp sql.NullString
 	if err := row.Scan(&r.ID, &r.TaskID, &r.NodeKey, &r.AttemptNo, &r.Status, &sub, &branch, &r.PrepJSON, &r.ExecInputJSON, &r.ExecOutputJSON, &r.ErrorText, &r.Action, &r.StartedAt, &r.FinishedAt, &r.WorkerID, &r.WorkerURL, &lp); err != nil {
-		return NodeRun{}, err
+		return store.NodeRun{}, err
 	}
 	r.SubStatus = sub.String
 	r.BranchID = branch.String
 	r.LogPath = lp.String
 	return r, nil
-}
-
-// QueueTask represents a task in the persistent queue
-type QueueTask struct {
-	ID        string `json:"id"`
-	TaskID    string `json:"task_id"`
-	NodeKey   string `json:"node_key"`
-	Service   string `json:"service"`
-	InputJSON string `json:"input_json"`
-	Status    string `json:"status"`
-	WorkerID  string `json:"worker_id"`
-	CreatedAt int64  `json:"created_at"`
-	StartedAt int64  `json:"started_at"`
-	TimeoutAt int64  `json:"timeout_at"`
 }
 
 // EnqueueTask adds a new task to the queue
@@ -514,14 +432,14 @@ func (s *SQLite) EnqueueTask(taskID, nodeKey, service, inputJSON string) (string
 }
 
 // PollQueue attempts to claim a pending task for the given services
-func (s *SQLite) PollQueue(workerID string, services []string, timeoutSec int64) (QueueTask, error) {
+func (s *SQLite) PollQueue(workerID string, services []string, timeoutSec int64) (store.QueueTask, error) {
 	if len(services) == 0 {
-		return QueueTask{}, nil
+		return store.QueueTask{}, nil
 	}
 
 	tx, err := s.DB.Begin()
 	if err != nil {
-		return QueueTask{}, err
+		return store.QueueTask{}, err
 	}
 	defer func() {
 		if err != nil {
@@ -541,12 +459,12 @@ func (s *SQLite) PollQueue(workerID string, services []string, timeoutSec int64)
 	// Find oldest pending task matching services
 	q := fmt.Sprintf("SELECT id, task_id, node_key, service, input_json FROM task_queue WHERE status='pending' AND service IN (%s) ORDER BY created_at ASC LIMIT 1", placeholders)
 
-	var qt QueueTask
+	var qt store.QueueTask
 	if err := tx.QueryRow(q, args...).Scan(&qt.ID, &qt.TaskID, &qt.NodeKey, &qt.Service, &qt.InputJSON); err != nil {
 		if err == sql.ErrNoRows {
-			return QueueTask{}, nil
+			return store.QueueTask{}, nil
 		}
-		return QueueTask{}, err
+		return store.QueueTask{}, err
 	}
 
 	// Claim it
@@ -555,13 +473,13 @@ func (s *SQLite) PollQueue(workerID string, services []string, timeoutSec int64)
 	res, err := tx.Exec("UPDATE task_queue SET status='claimed', worker_id=?, started_at=?, timeout_at=? WHERE id=? AND status='pending'",
 		workerID, now, timeoutAt, qt.ID)
 	if err != nil {
-		return QueueTask{}, err
+		return store.QueueTask{}, err
 	}
 
 	aff, _ := res.RowsAffected()
 	if aff == 0 {
 		// Race condition: someone else claimed it
-		return QueueTask{}, nil
+		return store.QueueTask{}, nil
 	}
 
 	qt.Status = "claimed"

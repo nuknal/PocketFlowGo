@@ -12,6 +12,7 @@ import (
 	"github.com/nuknal/PocketFlowGo/pkg/engine"
 	"github.com/nuknal/PocketFlowGo/pkg/server"
 	"github.com/nuknal/PocketFlowGo/pkg/store"
+	"github.com/nuknal/PocketFlowGo/pkg/store/sqlstore"
 	"github.com/nuknal/PocketFlowGo/ui"
 )
 
@@ -20,7 +21,7 @@ func main() {
 	if dbpath == "" {
 		dbpath = "scheduler.db"
 	}
-	s, err := store.OpenSQLite(dbpath)
+	s, err := sqlstore.OpenSQLite(dbpath)
 	if err != nil {
 		panic(err)
 	}

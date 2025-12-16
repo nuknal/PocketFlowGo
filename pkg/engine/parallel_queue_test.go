@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nuknal/PocketFlowGo/pkg/store"
+	"github.com/nuknal/PocketFlowGo/pkg/store/sqlstore"
 )
 
 func TestParallelQueue_Mixed(t *testing.T) {
@@ -15,7 +15,7 @@ func TestParallelQueue_Mixed(t *testing.T) {
 	dbPath := "test_parallel_queue.db"
 	os.Remove(dbPath)
 	defer os.Remove(dbPath)
-	s, err := store.OpenSQLite(dbPath)
+	s, err := sqlstore.OpenSQLite(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
