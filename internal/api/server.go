@@ -61,6 +61,35 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/tasks/signal", withCORS(s.handleTaskSignal))
 	mux.HandleFunc("/api/queue/poll", withCORS(s.handleQueuePoll))
 	mux.HandleFunc("/api/queue/complete", withCORS(s.handleQueueComplete))
+	mux.HandleFunc("/api/queue/update_run", withCORS(s.handleQueueUpdateRun))
+}
+
+func (s *Server) handleQueueUpdateRun(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, map[string]string{"error": "method not allowed"}, 405)
+		return
+	}
+	var payload struct {
+		RunID  string `json:"run_id"`
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, map[string]string{"error": "bad request"}, 400)
+		return
+	}
+	if payload.RunID == "" {
+		writeJSON(w, map[string]string{"error": "run_id required"}, 400)
+		return
+	}
+
+	updates := map[string]interface{}{
+		"status": payload.Status,
+	}
+	if err := s.Store.UpdateNodeRun(payload.RunID, updates); err != nil {
+		writeJSON(w, map[string]string{"error": err.Error()}, 500)
+		return
+	}
+	writeJSON(w, map[string]string{"ok": "1"}, 200)
 }
 
 func (s *Server) handleQueuePoll(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +127,8 @@ func (s *Server) handleQueueComplete(w http.ResponseWriter, r *http.Request) {
 		QueueID string      `json:"queue_id"`
 		Result  interface{} `json:"result"`
 		Error   string      `json:"error"`
+		LogPath string      `json:"log_path"`
+		RunID   string      `json:"run_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		writeJSON(w, map[string]string{"error": "bad request"}, 400)
@@ -132,32 +163,53 @@ func (s *Server) handleQueueComplete(w http.ResponseWriter, r *http.Request) {
 		runStatus = "error"
 	}
 
-	// We need to properly record the run.
-	// Using a simple map for now as per SaveNodeRun signature
-	run := map[string]interface{}{
-		"task_id":          t.ID,
-		"node_key":         t.CurrentNodeKey,
-		"attempt_no":       1, // Simplified for now
-		"status":           runStatus,
-		"prep_json":        "{}", // We don't have prep info here easily without reloading flow def
-		"exec_input_json":  "{}", // We don't have input here easily
-		"exec_output_json": "{}", // We will store result below
-		"error_text":       payload.Error,
-		"action":           "",
-		"started_at":       nowUnix(), // Approximate
-		"finished_at":      nowUnix(),
-		"worker_id":        "queue-worker", // We could track actual worker ID from payload if passed
-		"worker_url":       "queue",
-		"log_path":         "",
-	}
+	// If RunID is provided, we UPDATE the existing run instead of creating a new one.
+	if payload.RunID != "" {
+		updates := map[string]interface{}{
+			"status":      runStatus,
+			"finished_at": nowUnix(),
+			"log_path":    payload.LogPath,
+			"error_text":  payload.Error,
+		}
+		if payload.Result != nil {
+			b, _ := json.Marshal(payload.Result)
+			updates["exec_output_json"] = string(b)
+		} else {
+			updates["exec_output_json"] = "{}"
+		}
 
-	if payload.Result != nil {
-		b, _ := json.Marshal(payload.Result)
-		run["exec_output_json"] = string(b)
-	}
+		if err := s.Store.UpdateNodeRun(payload.RunID, updates); err != nil {
+			// Log error but continue
+		}
+	} else {
+		// Fallback to creating a new run if RunID is missing (backward compatibility)
+		// We need to properly record the run.
+		// Using a simple map for now as per SaveNodeRun signature
+		run := map[string]interface{}{
+			"task_id":          t.ID,
+			"node_key":         t.CurrentNodeKey,
+			"attempt_no":       1, // Simplified for now
+			"status":           runStatus,
+			"prep_json":        "{}", // We don't have prep info here easily without reloading flow def
+			"exec_input_json":  "{}", // We don't have input here easily
+			"exec_output_json": "{}", // We will store result below
+			"error_text":       payload.Error,
+			"action":           "",
+			"started_at":       nowUnix(), // Approximate
+			"finished_at":      nowUnix(),
+			"worker_id":        "queue-worker", // We could track actual worker ID from payload if passed
+			"worker_url":       "queue",
+			"log_path":         payload.LogPath,
+		}
 
-	if err := s.Store.SaveNodeRun(run); err != nil {
-		// Log error but continue
+		if payload.Result != nil {
+			b, _ := json.Marshal(payload.Result)
+			run["exec_output_json"] = string(b)
+		}
+
+		if err := s.Store.SaveNodeRun(run); err != nil {
+			// Log error but continue
+		}
 	}
 
 	// 4. Update task status to PENDING so the scheduler picks it up and advances it

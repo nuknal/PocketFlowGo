@@ -59,7 +59,9 @@ func (s *SQLite) Init() error {
 
 func nowUnix() int64 { return time.Now().Unix() }
 
-func genID(prefix string) string { return fmt.Sprintf("%s-%s", prefix, uuid.New().String()) }
+func GenID(prefix string) string { return fmt.Sprintf("%s-%s", prefix, uuid.New().String()) }
+
+func genID(prefix string) string { return GenID(prefix) }
 
 // WorkerInfo represents a registered worker node.
 type WorkerInfo struct {
@@ -333,6 +335,10 @@ func (s *SQLite) UpdateTaskStatusOwned(id string, owner string, status string) e
 func (s *SQLite) SaveNodeRun(nr map[string]interface{}) error {
 	id := genID("run")
 	nr["id"] = id
+	return s.CreateNodeRun(nr)
+}
+
+func (s *SQLite) CreateNodeRun(nr map[string]interface{}) error {
 	cols := []string{"id", "task_id", "node_key", "attempt_no", "status", "sub_status", "branch_id", "prep_json", "exec_input_json", "exec_output_json", "error_text", "action", "started_at", "finished_at", "worker_id", "worker_url", "log_path"}
 	vals := make([]interface{}, 0, len(cols))
 	for _, c := range cols {
@@ -345,6 +351,22 @@ func (s *SQLite) SaveNodeRun(nr map[string]interface{}) error {
 	ph := strings.Repeat("?,", len(cols))
 	ph = ph[:len(ph)-1]
 	_, err := s.DB.Exec("INSERT INTO node_runs("+strings.Join(cols, ",")+") VALUES("+ph+")", vals...)
+	return err
+}
+
+func (s *SQLite) UpdateNodeRun(id string, updates map[string]interface{}) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	cols := []string{}
+	vals := []interface{}{}
+	for k, v := range updates {
+		cols = append(cols, fmt.Sprintf("%s=?", k))
+		vals = append(vals, v)
+	}
+	vals = append(vals, id)
+	q := fmt.Sprintf("UPDATE node_runs SET %s WHERE id=?", strings.Join(cols, ","))
+	_, err := s.DB.Exec(q, vals...)
 	return err
 }
 

@@ -40,7 +40,9 @@ func (e *Engine) runExecutorNode(in NodeRunInput) error {
 
 		// Log and record execution attempt
 		e.logf("task=%s node=%s kind=executor attempt=%d worker=%s status=%s", in.Task.ID, in.NodeKey, attempts, workerID, ternary(execErr == nil, "ok", "error"))
-		e.recordRun(in.Task, in.NodeKey, attempts, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"input_key": in.Node.Prep.InputKey}, in.Input, execRes, errString(execErr), action, workerID, workerURL, logPath)
+		if !res.SkipRecord {
+			e.recordRun(in.Task, in.NodeKey, attempts, ternary(execErr == nil, "ok", "error"), map[string]interface{}{"input_key": in.Node.Prep.InputKey}, in.Input, execRes, errString(execErr), action, workerID, workerURL, logPath)
+		}
 
 		if execErr == nil {
 			break

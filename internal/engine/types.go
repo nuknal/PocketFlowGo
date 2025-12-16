@@ -15,11 +15,12 @@ type ExecutorInput struct {
 
 // ExecutorResult encapsulates the result of execution.
 type ExecutorResult struct {
-	Result    interface{}
-	WorkerID  string
-	WorkerURL string
-	LogPath   string
-	Error     error
+	Result     interface{}
+	WorkerID   string
+	WorkerURL  string
+	LogPath    string
+	Error      error
+	SkipRecord bool
 }
 
 // NodeRunInput encapsulates input parameters for running a node.

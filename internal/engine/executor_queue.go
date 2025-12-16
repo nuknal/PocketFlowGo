@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/nuknal/PocketFlowGo/internal/store"
 )
@@ -23,22 +24,58 @@ func (e *Engine) execQueue(in ExecutorInput) ExecutorResult {
 			}
 		}
 
-		if lastRun != nil && lastRun.Status == "ok" {
-			// Found a completed run! Return the result.
-			var res interface{}
-			if err := json.Unmarshal([]byte(lastRun.ExecOutputJSON), &res); err != nil {
-				return ExecutorResult{WorkerID: "queue", WorkerURL: "queue", Error: errorString("failed to parse result")}
+		if lastRun != nil {
+			if lastRun.Status == "ok" {
+				// Found a completed run! Return the result.
+				var res interface{}
+				if err := json.Unmarshal([]byte(lastRun.ExecOutputJSON), &res); err != nil {
+					return ExecutorResult{WorkerID: "queue", WorkerURL: "queue", Error: errorString("failed to parse result")}
+				}
+				return ExecutorResult{Result: res, WorkerID: lastRun.WorkerID, WorkerURL: "queue", LogPath: lastRun.LogPath, SkipRecord: true}
 			}
-			return ExecutorResult{Result: res, WorkerID: lastRun.WorkerID, WorkerURL: "queue", LogPath: lastRun.LogPath}
-		}
 
-		if lastRun != nil && lastRun.Status == "error" {
-			return ExecutorResult{WorkerID: lastRun.WorkerID, WorkerURL: "queue", LogPath: lastRun.LogPath, Error: errorString(lastRun.ErrorText)}
+			if lastRun.Status == "error" {
+				return ExecutorResult{WorkerID: lastRun.WorkerID, WorkerURL: "queue", LogPath: lastRun.LogPath, Error: errorString(lastRun.ErrorText), SkipRecord: true}
+			}
+
+			// If already running or queued, don't re-enqueue
+			if lastRun.Status == "queued" || lastRun.Status == "running" {
+				return ExecutorResult{WorkerID: "queue", WorkerURL: "queue", Error: ErrAsyncPending}
+			}
 		}
 	}
 
 	// 2. If no result, enqueue the task
-	payload := map[string]interface{}{"input": in.Input, "params": in.Params}
+	// Create a new node_run with status "queued"
+	runID := store.GenID("run")
+
+	// Create the node_run record
+	nr := map[string]interface{}{
+		"id":               runID,
+		"task_id":          in.Task.ID,
+		"node_key":         in.NodeKey,
+		"attempt_no":       1,
+		"status":           "queued",
+		"prep_json":        toJSON(map[string]interface{}{"input_key": in.Node.Prep.InputKey}),
+		"exec_input_json":  toJSON(in.Input),
+		"exec_output_json": toJSON(nil),
+		"error_text":       "",
+		"action":           "",
+		"started_at":       time.Now().Unix(),
+		"finished_at":      0, // Not finished
+		"worker_id":        "queue",
+		"worker_url":       "queue",
+		"log_path":         "",
+	}
+	if err := e.Store.CreateNodeRun(nr); err != nil {
+		e.logf("failed to create queued node_run: %v", err)
+	}
+
+	payload := map[string]interface{}{
+		"input":  in.Input,
+		"params": in.Params,
+		"run_id": runID,
+	}
 	inputJSON, _ := json.Marshal(payload)
 
 	_, err = e.Store.EnqueueTask(in.Task.ID, in.NodeKey, in.Node.Service, string(inputJSON))

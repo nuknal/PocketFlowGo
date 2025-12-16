@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,12 +30,21 @@ type QueueResult struct {
 	QueueID string      `json:"queue_id"`
 	Result  interface{} `json:"result"`
 	Error   string      `json:"error"`
+	LogPath string      `json:"log_path"`
+	RunID   string      `json:"run_id,omitempty"`
+}
+
+// QueueUpdate represents an update to the running task
+type QueueUpdate struct {
+	RunID  string `json:"run_id"`
+	Status string `json:"status"`
 }
 
 var (
 	schedulerURL = flag.String("server", "http://localhost:8070", "Scheduler API URL")
 	workerID     = flag.String("id", "", "Worker ID (default: hostname-pid)")
 	services     = flag.String("services", "async-transform", "Comma-separated list of services")
+	logDir       = flag.String("log_dir", "./logs", "Directory to store execution logs")
 )
 
 func main() {
@@ -92,8 +103,8 @@ func main() {
 
 		log.Printf("Received task %s for service %s", task.ID, task.Service)
 
-		// 2. Execute
-		res, execErr := execute(task)
+		// 2. Execute with logging
+		res, logPath, execErr := executeWithLog(task)
 		errStr := ""
 		if execErr != nil {
 			errStr = execErr.Error()
@@ -103,10 +114,67 @@ func main() {
 		}
 
 		// 3. Complete
-		if err := complete(client, task.ID, res, errStr); err != nil {
+		if err := completeTask(client, task, res, errStr, logPath); err != nil {
 			log.Printf("Complete error: %v", err)
 		}
 	}
+}
+
+func executeWithLog(task *QueueTask) (interface{}, string, error) {
+	// Parse payload to find run_id
+	var payload struct {
+		Input  interface{}            `json:"input"`
+		Params map[string]interface{} `json:"params"`
+		RunID  string                 `json:"run_id"`
+	}
+	_ = json.Unmarshal([]byte(task.InputJSON), &payload)
+
+	// Create log dir if not exists
+	if err := os.MkdirAll(*logDir, 0755); err != nil {
+		return nil, "", fmt.Errorf("failed to create log dir: %v", err)
+	}
+
+	// Create log file
+	absLogDir, _ := filepath.Abs(*logDir)
+	logFileName := fmt.Sprintf("%s_%d.log", task.ID, time.Now().UnixNano())
+	logPath := filepath.Join(absLogDir, logFileName)
+
+	f, err := os.Create(logPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create log file: %v", err)
+	}
+	defer f.Close()
+
+	// Create a multi-writer logger
+	mw := io.MultiWriter(os.Stdout, f)
+	logger := log.New(mw, fmt.Sprintf("[%s] ", task.ID), log.LstdFlags)
+
+	logger.Printf("Starting execution for task %s (Service: %s)", task.ID, task.Service)
+
+	// Report "running" status if run_id exists
+	if payload.RunID != "" {
+		updateStatus(payload.RunID, "running")
+	}
+
+	res, err := execute(task, logger)
+	logger.Printf("Execution finished. Error: %v", err)
+
+	return res, logPath, err
+}
+
+func updateStatus(runID string, status string) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	reqBody := QueueUpdate{
+		RunID:  runID,
+		Status: status,
+	}
+	b, _ := json.Marshal(reqBody)
+	resp, err := client.Post(*schedulerURL+"/api/queue/update_run", "application/json", bytes.NewReader(b))
+	if err != nil {
+		log.Printf("Failed to update status: %v", err)
+		return
+	}
+	defer resp.Body.Close()
 }
 
 func poll(client *http.Client, services []string) (*QueueTask, error) {
@@ -135,11 +203,30 @@ func poll(client *http.Client, services []string) (*QueueTask, error) {
 	return &task, nil
 }
 
-func complete(client *http.Client, queueID string, result interface{}, errStr string) error {
+func complete(client *http.Client, queueID string, result interface{}, errStr string, logPath string) error {
+	// Need to extract RunID again or pass it down.
+	// Since we are not passing task object here, let's keep it simple.
+	// We can update QueueResult struct in main.go but we also need to pass RunID to complete.
+	// Let's assume complete just calls the endpoint and the endpoint handles the rest.
+	// But wait, the endpoint uses RunID if present to update the run.
+
+	// Actually, we should extract RunID in main loop and pass it.
+	return nil
+}
+
+// Rewriting complete function to be cleaner and use RunID
+func completeTask(client *http.Client, task *QueueTask, result interface{}, errStr string, logPath string) error {
+	var payload struct {
+		RunID string `json:"run_id"`
+	}
+	_ = json.Unmarshal([]byte(task.InputJSON), &payload)
+
 	reqBody := QueueResult{
-		QueueID: queueID,
+		QueueID: task.ID,
 		Result:  result,
 		Error:   errStr,
+		LogPath: logPath,
+		RunID:   payload.RunID,
 	}
 	b, _ := json.Marshal(reqBody)
 	resp, err := client.Post(*schedulerURL+"/api/queue/complete", "application/json", bytes.NewReader(b))
@@ -153,7 +240,7 @@ func complete(client *http.Client, queueID string, result interface{}, errStr st
 	return nil
 }
 
-func execute(task *QueueTask) (interface{}, error) {
+func execute(task *QueueTask, logger *log.Logger) (interface{}, error) {
 	// Parse input
 	var payload struct {
 		Input  interface{}            `json:"input"`
@@ -164,13 +251,13 @@ func execute(task *QueueTask) (interface{}, error) {
 	}
 
 	// Simulate processing time
-	log.Printf("Processing %s...", task.Service)
+	logger.Printf("Processing %s...", task.Service)
 	time.Sleep(2 * time.Second)
 
 	// Basic logic
 	switch task.Service {
 	case "async-transform":
-		fmt.Println("payload:", payload)
+		logger.Printf("payload: %v", payload)
 		if inputMap, ok := payload.Input.(map[string]interface{}); ok {
 			if text, ok := inputMap["text"].(string); ok {
 				title := inputMap["title"]
