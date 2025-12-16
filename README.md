@@ -16,7 +16,8 @@ PocketFlowGo is a lightweight, centralized task orchestration service written in
 
 <p align="center">
   <img src="docs/screenshots/FlowDetails.png" alt="Flow Details" width="45%">
-  &nbsp; &nbsp;
+</p>
+<p align="center">
   <img src="docs/screenshots/TaskDetails.png" alt="Task Details" width="45%">
 </p>
 
