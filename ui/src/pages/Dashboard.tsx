@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Activity, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { api, type Task, type Worker } from '@/lib/api'
@@ -115,7 +116,11 @@ export default function Dashboard() {
           <CardContent>
             <div className="space-y-4">
               {tasks.slice(0, 5).map((task) => (
-                <div key={task.id} className="flex items-center">
+                <Link
+                  key={task.id}
+                  to={`/tasks/${task.id}`}
+                  className="flex items-center p-2 rounded-md hover:bg-muted/50 transition-colors"
+                >
                   <div className="ml-4 space-y-1">
                     <p className="text-sm font-medium leading-none">
                       Task {task.id}
@@ -127,7 +132,7 @@ export default function Dashboard() {
                   <div className="ml-auto font-medium text-xs text-muted-foreground">
                     {new Date(task.updated_at * 1000).toLocaleString()}
                   </div>
-                </div>
+                </Link>
               ))}
               {tasks.length === 0 && (
                 <p className="text-sm text-muted-foreground">

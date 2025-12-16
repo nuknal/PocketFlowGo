@@ -172,11 +172,20 @@ export default function FlowDetails() {
 
   const handleOpenCreateDialog = () => {
     if (selectedVersion) {
-      setNewDefinition(selectedVersion.definition_json || defaultDefinition)
+      try {
+        const obj = JSON.parse(
+          selectedVersion.definition_json || defaultDefinition
+        )
+        setNewDefinition(yaml.dump(obj))
+        setEditorLanguage('yaml')
+      } catch (e) {
+        console.error('Failed to convert existing definition to YAML', e)
+        setNewDefinition(selectedVersion.definition_json || defaultDefinition)
+        setEditorLanguage('json')
+      }
       setNewVersion(
         (versions.length > 0 ? versions[0].version + 1 : 1).toString()
       )
-      setEditorLanguage('yaml') // Default to YAML for existing versions too, as it's cleaner
     } else {
       // For new flows, use the default definition but convert to YAML immediately
       try {
