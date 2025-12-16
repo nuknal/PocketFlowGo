@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import { useNavigate } from 'react-router-dom'
+import { extractParamsFromDefinition } from '@/lib/flowUtils'
 
 interface RunTaskDialogProps {
   open: boolean
@@ -19,20 +20,29 @@ interface RunTaskDialogProps {
   flowId: string
   version: number
   flowName?: string
-  onSuccess?: () => void
+  definition?: string
+  onSuccess?: (taskId: string) => void
 }
-
 export function RunTaskDialog({
   open,
   onOpenChange,
   flowId,
   version,
   flowName,
+  definition,
   onSuccess,
 }: RunTaskDialogProps) {
   const [creating, setCreating] = useState(false)
   const [taskParams, setTaskParams] = useState('{}')
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (open && definition) {
+      setTaskParams(extractParamsFromDefinition(definition))
+    } else if (open) {
+      setTaskParams('{}')
+    }
+  }, [open, definition])
 
   const handleCreateTask = async () => {
     setCreating(true)
@@ -51,7 +61,7 @@ export function RunTaskDialog({
       onOpenChange(false)
       setTaskParams('{}')
       if (onSuccess) {
-        onSuccess()
+        onSuccess(id)
       } else {
         // Default behavior: navigate to the new task
         navigate(`/tasks/${id}`)

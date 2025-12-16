@@ -462,7 +462,7 @@ export default function FlowDetails() {
           flowId={id}
           version={selectedVersion.version}
           flowName={`Flow ${id}`}
-          onSuccess={() => setIsRunDialogOpen(false)}
+          definition={selectedVersion.definition_json}
         />
       )}
     </div>
