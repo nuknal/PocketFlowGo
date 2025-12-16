@@ -12,6 +12,7 @@ import (
 
 	"github.com/nuknal/PocketFlowGo/internal/engine"
 	"github.com/nuknal/PocketFlowGo/internal/store"
+	"gopkg.in/yaml.v3"
 )
 
 // Server serves the API endpoints.
@@ -380,10 +381,27 @@ func (s *Server) handleFlowVersion(w http.ResponseWriter, r *http.Request) {
 			FlowID         string
 			Version        int
 			DefinitionJSON string
+			DefinitionYAML string
 			Status         string
 		}
 		dec := json.NewDecoder(r.Body)
 		_ = dec.Decode(&payload)
+
+		// Convert YAML to JSON if provided
+		if payload.DefinitionYAML != "" {
+			var defMap map[string]interface{}
+			if err := yaml.Unmarshal([]byte(payload.DefinitionYAML), &defMap); err != nil {
+				writeJSON(w, map[string]string{"error": "invalid yaml: " + err.Error()}, 400)
+				return
+			}
+			jsonBytes, err := json.Marshal(defMap)
+			if err != nil {
+				writeJSON(w, map[string]string{"error": "failed to convert yaml to json: " + err.Error()}, 500)
+				return
+			}
+			payload.DefinitionJSON = string(jsonBytes)
+		}
+
 		id, err := s.Store.CreateFlowVersion(payload.FlowID, payload.Version, payload.DefinitionJSON, payload.Status)
 		if err != nil {
 			writeJSON(w, map[string]string{"error": err.Error()}, 500)

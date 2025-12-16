@@ -192,7 +192,8 @@ export const api = {
     flowId: string,
     version: number,
     definition: string,
-    status: string = 'published'
+    status: string = 'published',
+    definitionYaml?: string
   ): Promise<{ id: string }> => {
     const res = await fetch(`${API_BASE_URL}/api/flows/version`, {
       method: 'POST',
@@ -203,6 +204,7 @@ export const api = {
         FlowID: flowId,
         Version: version,
         DefinitionJSON: definition,
+        DefinitionYAML: definitionYaml,
         Status: status,
       }),
     })

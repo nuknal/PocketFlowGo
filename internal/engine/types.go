@@ -44,6 +44,8 @@ type DefNode struct {
 	Script   struct {
 		Cmd           string            `json:"cmd"`
 		Args          []string          `json:"args"`
+		Code          string            `json:"code"`
+		Language      string            `json:"language"`
 		TimeoutMillis int               `json:"timeout_ms"`
 		Env           map[string]string `json:"env"`
 		WorkDir       string            `json:"work_dir"`
@@ -117,6 +119,8 @@ type ExecSpec struct {
 	Script   struct {
 		Cmd           string            `json:"cmd"`
 		Args          []string          `json:"args"`
+		Code          string            `json:"code"`
+		Language      string            `json:"language"`
 		TimeoutMillis int               `json:"timeout_ms"`
 		Env           map[string]string `json:"env"`
 		WorkDir       string            `json:"work_dir"`

@@ -34,12 +34,34 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ArrowLeft, Plus, Play } from 'lucide-react'
 import { api, type FlowVersion, type Task } from '@/lib/api'
 import { RunTaskDialog } from '@/components/RunTaskDialog'
 import FlowVisualizer from '@/components/flow/FlowVisualizer'
+import { FlowEditor } from '@/components/flow/FlowEditor'
+import yaml from 'js-yaml'
+
+const defaultDefinition = JSON.stringify(
+  {
+    start: 'hello_python',
+    nodes: {
+      hello_python: {
+        kind: 'executor',
+        func: 'local_script',
+        script: {
+          language: 'python',
+          code: 'import json\nimport os\n\nprint(json.dumps({"message": "Hello from PocketFlowGo!", "env": dict(os.environ)}))',
+          output_mode: 'json',
+        },
+        post: { output_key: 'result' },
+      },
+    },
+    edges: [],
+  },
+  null,
+  2
+)
 
 export default function FlowDetails() {
   const { id } = useParams<{ id: string }>()
@@ -51,6 +73,7 @@ export default function FlowDetails() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [newVersion, setNewVersion] = useState('')
   const [newDefinition, setNewDefinition] = useState('')
+  const [editorLanguage, setEditorLanguage] = useState<'json' | 'yaml'>('yaml')
   const [creating, setCreating] = useState(false)
   const [isRunDialogOpen, setIsRunDialogOpen] = useState(false)
   const [tasks, setTasks] = useState<Task[]>([])
@@ -105,11 +128,37 @@ export default function FlowDetails() {
     }
   }, [selectedVersion])
 
+  const handleLanguageChange = (newLang: 'json' | 'yaml') => {
+    if (newLang === editorLanguage) return
+    try {
+      let content = ''
+      if (newLang === 'yaml') {
+        const obj = JSON.parse(newDefinition)
+        content = yaml.dump(obj)
+      } else {
+        const obj = yaml.load(newDefinition)
+        content = JSON.stringify(obj, null, 2)
+      }
+      setNewDefinition(content)
+      setEditorLanguage(newLang)
+    } catch (error) {
+      console.error('Conversion failed', error)
+      setEditorLanguage(newLang)
+    }
+  }
+
   const handleCreateVersion = async () => {
     if (!id || !newVersion || !newDefinition) return
     setCreating(true)
     try {
-      await api.createFlowVersion(id, parseInt(newVersion), newDefinition)
+      const isYaml = editorLanguage === 'yaml'
+      await api.createFlowVersion(
+        id,
+        parseInt(newVersion),
+        isYaml ? '' : newDefinition,
+        'published',
+        isYaml ? newDefinition : undefined
+      )
       setNewVersion('')
       setNewDefinition('')
       setIsDialogOpen(false)
@@ -121,23 +170,27 @@ export default function FlowDetails() {
     }
   }
 
-  const defaultDefinition = JSON.stringify(
-    {
-      start: 'start_node',
-      nodes: {
-        start_node: {
-          kind: 'executor',
-          service: 'transform',
-          params: { op: 'upper' },
-          prep: { input_key: 'input' },
-          post: { output_key: 'output', action_static: 'next' },
-        },
-      },
-      edges: [],
-    },
-    null,
-    2
-  )
+  const handleOpenCreateDialog = () => {
+    if (selectedVersion) {
+      setNewDefinition(selectedVersion.definition_json || defaultDefinition)
+      setNewVersion(
+        (versions.length > 0 ? versions[0].version + 1 : 1).toString()
+      )
+      setEditorLanguage('yaml') // Default to YAML for existing versions too, as it's cleaner
+    } else {
+      // For new flows, use the default definition but convert to YAML immediately
+      try {
+        const obj = JSON.parse(defaultDefinition)
+        setNewDefinition(yaml.dump(obj))
+        setEditorLanguage('yaml')
+      } catch {
+        setNewDefinition(defaultDefinition)
+        setEditorLanguage('json')
+      }
+      setNewVersion('1')
+    }
+    setIsDialogOpen(true)
+  }
 
   return (
     <div className="space-y-6">
@@ -183,12 +236,12 @@ export default function FlowDetails() {
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => setNewDefinition(defaultDefinition)}>
+              <Button onClick={handleOpenCreateDialog}>
                 <Plus className="mr-2 h-4 w-4" />
                 Create Version
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-[1200px]">
               <DialogHeader>
                 <DialogTitle>Create Flow Version</DialogTitle>
                 <DialogDescription>
@@ -196,8 +249,8 @@ export default function FlowDetails() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="version" className="text-right">
+                <div className="flex items-center gap-4">
+                  <Label htmlFor="version" className="text-right w-20">
                     Version
                   </Label>
                   <Input
@@ -206,19 +259,52 @@ export default function FlowDetails() {
                     value={newVersion}
                     onChange={(e) => setNewVersion(e.target.value)}
                     placeholder="e.g. 1"
-                    className="col-span-3"
+                    className="w-32"
                   />
+                  <div className="flex gap-2 ml-auto">
+                    <Button
+                      variant={
+                        editorLanguage === 'json' ? 'default' : 'outline'
+                      }
+                      size="sm"
+                      onClick={() => handleLanguageChange('json')}
+                    >
+                      JSON
+                    </Button>
+                    <Button
+                      variant={
+                        editorLanguage === 'yaml' ? 'default' : 'outline'
+                      }
+                      size="sm"
+                      onClick={() => handleLanguageChange('yaml')}
+                    >
+                      YAML
+                    </Button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-4 items-start gap-4">
-                  <Label htmlFor="definition" className="text-right pt-2">
-                    Definition (JSON)
-                  </Label>
-                  <Textarea
-                    id="definition"
-                    value={newDefinition}
-                    onChange={(e) => setNewDefinition(e.target.value)}
-                    className="col-span-3 h-[300px] font-mono text-xs"
-                  />
+                <div className="grid grid-cols-2 gap-4 h-[600px]">
+                  <div className="border rounded-md overflow-hidden">
+                    <FlowEditor
+                      value={newDefinition}
+                      onChange={setNewDefinition}
+                      language={editorLanguage}
+                    />
+                  </div>
+                  <div className="border rounded-md overflow-hidden bg-background">
+                    <FlowVisualizer
+                      definitionJson={(() => {
+                        try {
+                          if (editorLanguage === 'yaml') {
+                            return JSON.stringify(yaml.load(newDefinition))
+                          }
+                          return newDefinition
+                        } catch {
+                          return '{}'
+                        }
+                      })()}
+                      height="100%"
+                    />
+                  </div>
                 </div>
               </div>
               <DialogFooter>
@@ -269,14 +355,25 @@ export default function FlowDetails() {
               <CardHeader>
                 <CardTitle>Definition</CardTitle>
               </CardHeader>
-              <CardContent>
-                <pre className="bg-muted p-4 rounded text-xs font-mono overflow-auto max-h-[400px]">
-                  {JSON.stringify(
-                    JSON.parse(selectedVersion.definition_json || '{}'),
-                    null,
-                    2
-                  )}
-                </pre>
+              <CardContent className="h-[400px]">
+                <FlowEditor
+                  value={
+                    selectedVersion.definition_json
+                      ? (() => {
+                          try {
+                            const obj = JSON.parse(
+                              selectedVersion.definition_json
+                            )
+                            return yaml.dump(obj)
+                          } catch {
+                            return selectedVersion.definition_json
+                          }
+                        })()
+                      : ''
+                  }
+                  language="yaml"
+                  readOnly={true}
+                />
               </CardContent>
             </Card>
 
