@@ -1,0 +1,123 @@
+edges:
+    - action: approval
+      from: choice
+      to: approval
+    - action: parallel
+      from: choice
+      to: parallel
+    - action: approved
+      from: approval
+      to: timer
+    - action: rejected
+      from: approval
+      to: parallel
+    - action: go
+      from: timer
+      to: foreach
+    - action: go
+      from: foreach
+      to: wait
+    - action: next
+      from: parallel
+      to: wait
+    - action: go
+      from: wait
+      to: sf
+    - action: next
+      from: sf
+      to: end
+nodes:
+    approval:
+        kind: approval
+        params:
+            approval_key: $shared.approval
+        post:
+            action_key: approval
+    choice:
+        choice_cases:
+            - action: approval
+              expr:
+                eq:
+                    - $params.path
+                    - approval
+        default_action: parallel
+        kind: choice
+    end:
+        kind: executor
+        params:
+            mul: 100
+        post:
+            output_key: end_out
+        prep:
+            input_key: $shared.sub_out.m
+        service: transform
+    foreach:
+        kind: foreach
+        parallel_mode: sequential
+        params:
+            mul: 2
+        post:
+            action_static: go
+            output_key: mapped
+        prep:
+            input_key: $shared.list
+        service: transform
+    parallel:
+        kind: parallel
+        max_parallel: 2
+        parallel_mode: concurrent
+        parallel_services:
+            - transform
+            - transform
+        params:
+            mul: 3
+        post:
+            action_static: next
+            output_key: agg
+        prep:
+            input_key: $params.val
+    sf:
+        kind: subflow
+        post:
+            action_static: next
+            output_key: sub_out
+        subflow:
+            edges:
+                - action: go
+                  from: a
+                  to: b
+            nodes:
+                a:
+                    kind: executor
+                    params:
+                        mul: 5
+                    post:
+                        action_static: go
+                        output_key: m
+                    prep:
+                        input_key: $params.val
+                    service: transform
+                b:
+                    kind: executor
+                    params:
+                        action: goC
+                    post:
+                        action_static: done
+                    prep:
+                        input_key: m
+                    service: route
+            start: a
+    timer:
+        kind: timer
+        params:
+            delay_ms: 100
+        post:
+            action_static: go
+    wait:
+        kind: wait_event
+        params:
+            signal_key: $shared.flag
+            timeout_ms: 1000
+        post:
+            action_static: go
+start: choice

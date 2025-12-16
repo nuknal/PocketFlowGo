@@ -1,0 +1,24 @@
+edges:
+    - action: to_sum
+      from: fe
+      to: sum
+nodes:
+    fe:
+        kind: foreach
+        parallel_mode: sequential
+        params:
+            mul: 2
+        post:
+            action_static: to_sum
+            output_key: mapped
+        prep:
+            input_key: $params.list
+        service: transform
+    sum:
+        kind: executor
+        post:
+            output_key: total
+        prep:
+            input_key: $shared.mapped
+        service: sum
+start: fe

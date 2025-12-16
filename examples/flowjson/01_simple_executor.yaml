@@ -1,0 +1,25 @@
+edges:
+    - action: to_end
+      from: start
+      to: end
+nodes:
+    end:
+        kind: executor
+        params:
+            mul: 1.5
+        post:
+            output_key: final
+        prep:
+            input_key: $shared.result
+        service: transform
+    start:
+        kind: executor
+        params:
+            mul: 2
+        post:
+            action_static: to_end
+            output_key: result
+        prep:
+            input_key: $params.val
+        service: transform
+start: start

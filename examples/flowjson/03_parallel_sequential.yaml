@@ -1,0 +1,26 @@
+edges:
+    - action: next
+      from: p
+      to: end
+nodes:
+    end:
+        kind: executor
+        post:
+            output_key: total
+        prep:
+            input_key: $shared.agg
+        service: sum
+    p:
+        kind: parallel
+        parallel_mode: sequential
+        parallel_services:
+            - transform
+            - transform
+        params:
+            mul: 3
+        post:
+            action_static: next
+            output_key: agg
+        prep:
+            input_key: $params.val
+start: p

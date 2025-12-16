@@ -1,0 +1,52 @@
+edges:
+    - action: next
+      from: sf
+      to: end
+nodes:
+    end:
+        kind: executor
+        params:
+            mul: 1
+        post:
+            action_static: ""
+        prep:
+            input_key: $params.val
+        service: transform
+    sf:
+        kind: subflow
+        post:
+            action_static: next
+            output_key: sub_out
+        subflow:
+            edges:
+                - action: go
+                  from: a
+                  to: b
+            nodes:
+                a:
+                    kind: executor
+                    params:
+                        mul: 2
+                    post:
+                        action_static: go
+                        output_key: m
+                    prep:
+                        input_key: $params.val
+                    service: transform
+                b:
+                    kind: executor
+                    params:
+                        action: goC
+                    post:
+                        action_static: done
+                    prep:
+                        input_key: m
+                    service: route
+            start: a
+        subflow_execs:
+            - exec_type: local_func
+              func: mul
+              node: a
+              params:
+                mul: 7
+start: sf

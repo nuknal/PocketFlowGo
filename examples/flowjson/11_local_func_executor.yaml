@@ -1,0 +1,14 @@
+edges: []
+nodes:
+    x:
+        exec_type: local_func
+        func: mul
+        kind: executor
+        params:
+            mul: 2
+        post:
+            action_static: ""
+            output_key: out
+        prep:
+            input_key: $params.val
+start: x

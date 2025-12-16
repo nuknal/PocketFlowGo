@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 func postJSON(base string, path string, payload interface{}, out interface{}) error {
@@ -52,7 +54,7 @@ func readDefs(dir string) ([]string, []string, error) {
 			continue
 		}
 		name := e.Name()
-		if strings.HasSuffix(strings.ToLower(name), ".json") {
+		if strings.HasSuffix(strings.ToLower(name), ".json") || strings.HasSuffix(strings.ToLower(name), ".yaml") || strings.HasSuffix(strings.ToLower(name), ".yml") {
 			entries = append(entries, e)
 		}
 	}
@@ -212,14 +214,39 @@ func main() {
 		name := names[i]
 		defStr := contents[i]
 		var def map[string]interface{}
-		_ = json.Unmarshal([]byte(defStr), &def)
+
+		var definitionJSON string
+
+		// Determine if JSON or YAML
+		if strings.HasPrefix(strings.TrimSpace(defStr), "{") {
+			// Assume JSON
+			if err := json.Unmarshal([]byte(defStr), &def); err != nil {
+				fmt.Printf("Failed to unmarshal JSON %s: %v\n", name, err)
+				continue
+			}
+			definitionJSON = defStr
+		} else {
+			// Assume YAML
+			if err := yaml.Unmarshal([]byte(defStr), &def); err != nil {
+				fmt.Printf("Failed to unmarshal YAML %s: %v\n", name, err)
+				continue
+			}
+			// Convert to JSON for internal storage/logic
+			jsonBytes, err := json.Marshal(def)
+			if err != nil {
+				fmt.Printf("Failed to convert YAML to JSON %s: %v\n", name, err)
+				continue
+			}
+			definitionJSON = string(jsonBytes)
+		}
+
 		var flowResp map[string]string
 		_ = postJSON(base, "/flows", map[string]string{"Name": name}, &flowResp)
 		flowID := flowResp["id"]
 		fmt.Println("FLOW", name)
-		fmt.Println(defStr)
+		fmt.Println(definitionJSON)
 		var verResp map[string]string
-		_ = postJSON(base, "/flows/version", map[string]interface{}{"FlowID": flowID, "Version": 1, "DefinitionJSON": defStr, "Status": "published"}, &verResp)
+		_ = postJSON(base, "/flows/version", map[string]interface{}{"FlowID": flowID, "Version": 1, "DefinitionJSON": definitionJSON, "Status": "published"}, &verResp)
 		params := deriveParams(def)
 		paramsStr, _ := json.Marshal(params)
 		var tResp map[string]string

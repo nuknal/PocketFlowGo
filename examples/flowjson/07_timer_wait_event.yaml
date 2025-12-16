@@ -1,0 +1,31 @@
+edges:
+    - action: go
+      from: timer
+      to: wait
+    - action: go
+      from: wait
+      to: end
+nodes:
+    end:
+        kind: executor
+        params:
+            mul: 1
+        post:
+            output_key: result
+        prep:
+            input_key: $params.val
+        service: transform
+    timer:
+        kind: timer
+        params:
+            delay_ms: 200
+        post:
+            action_static: go
+    wait:
+        kind: wait_event
+        params:
+            signal_key: $shared.flag
+            timeout_ms: 500
+        post:
+            action_static: go
+start: timer

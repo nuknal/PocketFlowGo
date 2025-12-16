@@ -1,0 +1,41 @@
+edges:
+    - action: B
+      from: choice
+      to: B
+    - action: C
+      from: choice
+      to: C
+nodes:
+    B:
+        kind: executor
+        params:
+            mul: 10
+        post:
+            output_key: result_b
+        prep:
+            input_key: $params.val
+        service: transform
+    C:
+        kind: executor
+        params:
+            mul: 20
+        post:
+            output_key: result_c
+        prep:
+            input_key: $params.val
+        service: transform
+    choice:
+        choice_cases:
+            - action: B
+              expr:
+                eq:
+                    - $params.path
+                    - B
+            - action: C
+              expr:
+                eq:
+                    - $params.path
+                    - C
+        default_action: B
+        kind: choice
+start: choice

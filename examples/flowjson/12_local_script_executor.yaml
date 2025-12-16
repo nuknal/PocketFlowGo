@@ -1,0 +1,17 @@
+edges: []
+nodes:
+    x:
+        exec_type: local_script
+        kind: executor
+        post:
+            action_key: v
+            output_key: out
+        script:
+            args:
+                - -c
+                - echo '{"v":42}'
+            cmd: bash
+            output_mode: json
+            stdin_mode: none
+            timeout_ms: 2000
+start: x

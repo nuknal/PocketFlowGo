@@ -1,0 +1,46 @@
+edges:
+    - action: next
+      from: sf
+      to: end
+nodes:
+    end:
+        kind: executor
+        params:
+            mul: 100
+        post:
+            output_key: final
+        prep:
+            input_key: $shared.sub_out.m
+        service: transform
+    sf:
+        kind: subflow
+        post:
+            action_static: next
+            output_key: sub_out
+        subflow:
+            edges:
+                - action: go
+                  from: a
+                  to: b
+            nodes:
+                a:
+                    kind: executor
+                    params:
+                        mul: 5
+                    post:
+                        action_static: go
+                        output_key: m
+                    prep:
+                        input_key: $params.x
+                    service: transform
+                b:
+                    kind: executor
+                    params:
+                        action: goC
+                    post:
+                        action_static: done
+                    prep:
+                        input_key: m
+                    service: route
+            start: a
+start: sf

@@ -1,0 +1,26 @@
+edges:
+    - action: to_sum
+      from: fe
+      to: sum
+nodes:
+    fe:
+        failure_strategy: fail_fast
+        kind: foreach
+        max_parallel: 3
+        parallel_mode: concurrent
+        params:
+            mul: 2
+        post:
+            action_static: to_sum
+            output_key: mapped
+        prep:
+            input_key: $params.list
+        service: transform
+    sum:
+        kind: executor
+        post:
+            output_key: total
+        prep:
+            input_key: $shared.mapped
+        service: sum
+start: fe

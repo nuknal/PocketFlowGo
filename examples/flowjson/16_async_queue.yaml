@@ -1,0 +1,30 @@
+edges:
+    - action: end
+      from: async_step
+      to: end
+    - action: default
+      from: end
+      to: ""
+nodes:
+    async_step:
+        exec_type: queue
+        kind: executor
+        params:
+            text: async-processing
+        post:
+            action_static: end
+            output_key: result
+        prep:
+            input_map:
+                text: $params.text
+                title: Default Title
+        service: async-transform
+    end:
+        exec_type: local_func
+        func: log_result
+        kind: executor
+        post:
+            output_key: local_out
+        prep:
+            input_key: $shared.result
+start: async_step

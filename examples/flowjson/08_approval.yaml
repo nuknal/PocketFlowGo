@@ -1,0 +1,33 @@
+edges:
+    - action: approved
+      from: approval
+      to: approved_exec
+    - action: rejected
+      from: approval
+      to: rejected_exec
+nodes:
+    approval:
+        kind: approval
+        params:
+            approval_key: $params.approval
+        post:
+            action_key: approval
+    approved_exec:
+        kind: executor
+        params:
+            mul: 100
+        post:
+            output_key: approved_result
+        prep:
+            input_key: $params.val
+        service: transform
+    rejected_exec:
+        kind: executor
+        params:
+            mul: 0
+        post:
+            output_key: rejected_result
+        prep:
+            input_key: $params.val
+        service: transform
+start: approval

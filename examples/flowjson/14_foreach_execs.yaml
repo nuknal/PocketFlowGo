@@ -1,0 +1,35 @@
+edges:
+    - action: go
+      from: fe
+      to: end
+nodes:
+    end:
+        exec_type: local_func
+        func: mul
+        kind: executor
+        params:
+            mul: 1
+        post:
+            action_static: ""
+        prep:
+            input_key: $params.val
+    fe:
+        exec_type: local_func
+        foreach_execs:
+            - index: 1
+              params:
+                mul: 4
+            - index: 2
+              params:
+                mul: 5
+        func: mul
+        kind: foreach
+        parallel_mode: sequential
+        params:
+            mul: 2
+        post:
+            action_static: go
+            output_key: mapped
+        prep:
+            input_key: $shared.arr
+start: fe

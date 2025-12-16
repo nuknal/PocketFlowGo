@@ -1,0 +1,39 @@
+edges:
+    - action: end
+      from: parallel_mix
+      to: end
+    - action: default
+      from: end
+      to: ""
+nodes:
+    end:
+        exec_type: local_func
+        func: log_result
+        kind: executor
+        params: {}
+    parallel_mix:
+        kind: parallel
+        parallel_execs:
+            - exec_type: local_func
+              func: upper
+              post:
+                output_key: local_out
+              prep:
+                input_key: $params.text
+              service: sync_branch
+            - exec_type: queue
+              params:
+                text: async-processing
+              post:
+                output_key: async_out
+              prep:
+                input_key: $params.text
+              service: async-transform
+        parallel_mode: concurrent
+        parallel_services:
+            - sync_branch
+            - async-transform
+        post:
+            action_static: end
+            output_key: parallel_results
+start: parallel_mix

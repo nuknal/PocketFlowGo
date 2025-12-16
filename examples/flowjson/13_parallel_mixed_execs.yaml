@@ -1,0 +1,35 @@
+edges:
+    - action: next
+      from: p
+      to: end
+nodes:
+    end:
+        kind: executor
+        params:
+            mul: 1
+        post:
+            action_static: ""
+        prep:
+            input_key: $params.val
+        service: transform
+    p:
+        kind: parallel
+        parallel_execs:
+            - exec_type: http
+              params:
+                mul: 2
+              service: transform
+            - exec_type: local_func
+              func: mul
+              params:
+                mul: 5
+              service: localMul
+        parallel_mode: concurrent
+        params:
+            mul: 1
+        post:
+            action_static: next
+            output_key: agg
+        prep:
+            input_key: $params.val
+start: p
